@@ -8,7 +8,6 @@
     <script src="/socket.io/socket.io.js"></script>
     
     <style>
-        /* Modern, clean dark theme for interface testing */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #121212;
@@ -28,7 +27,7 @@
             border: 1px solid #2d2d2d;
         }
         .active {
-            display: block;
+            display: block; /* This makes the current screen visible */
         }
         h1 {
             color: #4CAF50;
@@ -127,10 +126,9 @@
     </div>
 
     <script>
-        // 2. CRITICAL FIX FOR RENDER: Empty io() automatically connects to your live web service URL
+        // Connects to Render network
         const socket = io();
 
-        // Interface Cache
         const loginScreen = document.getElementById('login-screen');
         const menuScreen = document.getElementById('menu-screen');
         const gameScreen = document.getElementById('game-screen');
@@ -145,7 +143,7 @@
 
         let currentUsername = "";
 
-        // --- Lobby Sign In Handling ---
+        // Sign In
         joinBtn.addEventListener('click', () => {
             const username = usernameInput.value.trim();
             if (username === "") {
@@ -156,21 +154,17 @@
             currentUsername = username;
             playerNameSpan.textContent = currentUsername;
 
-            // Transmit username data to your server
             socket.emit('playerLogin', { username: currentUsername });
 
-            // Swap interface view to the Main Menu
+            // Swap to menu
             changeScreen(menuScreen);
-            addLog("Successfully connected to Render cloud network.");
+            addLog("Successfully connected to the server.");
         });
 
-        // --- Menu Navigation Handling ---
+        // Menu Navigation
         function selectMode(modeName) {
             currentModeTitle.textContent = modeName;
-            
-            // Sync with your Node.js server regarding chosen layout rules
             socket.emit('joinMode', { mode: modeName });
-            
             changeScreen(gameScreen);
             addLog(`Entered match lobby for [${modeName}]`);
         }
@@ -181,44 +175,31 @@
             diceDisplay.textContent = "🎲";
         }
 
-        // --- Dice Action Event Trigger ---
+        // Rolling Action
         rollBtn.addEventListener('click', () => {
-            // Tells the server you want to roll. Server processes calculation.
             socket.emit('requestRoll');
         });
 
-        // --- Real-time Event Networks (Listening to Render Server) ---
         socket.on('connect', () => {
-            console.log("WebSocket stream connected successfully.");
+            console.log("Connected to server!");
         });
 
-        // When the server calculates a roll result, all matching client applications catch it here
         socket.on('rollResult', (data) => {
-            console.log("Incoming server roll dataset:", data);
-            
-            // Visual element update
             diceDisplay.textContent = "🎲 " + data.roll;
             
-            // Add a temporary subtle bounce animation to the die frame
             diceDisplay.style.transform = "scale(1.2)";
             setTimeout(() => { diceDisplay.style.transform = "scale(1)"; }, 150);
             
-            // Display roll logs on screen
             const displayingIdentity = data.playerID ? data.playerID.substring(0, 5) : "Player";
-            addLog(`User [${displayingIdentity}] rolled a structural: ${data.roll}`);
-            
-            /* HOIST INTERFACE ANIMATIONS HERE:
-               If you already have a pre-made rolling function inside your old project scripts 
-               (like rollAnimationFunc), you can call it safely inside this block.
-            */
+            addLog(`User [${displayingIdentity}] rolled a: ${data.roll}`);
         });
 
-        // --- Utility Helper Operations ---
+        // FIXED Helper Function
         function changeScreen(targetView) {
             loginScreen.classList.remove('active');
             menuScreen.classList.remove('active');
             gameScreen.classList.remove('active');
-            targetView.add('active');
+            targetView.classList.add('active'); // Fixed this line!
         }
 
         function addLog(textString) {
@@ -226,7 +207,7 @@
             logEntry.style.margin = "5px 0";
             logEntry.textContent = `> ${textString}`;
             logDiv.appendChild(logEntry);
-            logDiv.scrollTop = logDiv.scrollHeight; // Keeps log window pinned to newest entries
+            logDiv.scrollTop = logDiv.scrollHeight; 
         }
     </script>
 </body>
