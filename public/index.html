@@ -3,9 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Dumpster Dice - Deluxe Arcade Edition</title>
-    
-    <script src="/socket.io/socket.io.js"></script>
-
     <style>
         :root {
             --p1-color: #FF5252;
@@ -528,6 +525,7 @@
 </head>
 <body>
 
+    <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
         <div id="login-box">
             <h1>🗑️ DUMPSTER DICE</h1>
@@ -546,6 +544,7 @@
         </div>
     </div>
 
+    <!-- ADMIN OVERLAY -->
     <div id="admin-overlay" style="display:none;">
         <div id="admin-box">
             <h2>⚙️ ADMIN PANEL</h2>
@@ -557,9 +556,11 @@
         </div>
     </div>
 
+    <!-- LOBBY OVERLAY -->
     <div id="lobby-overlay">
         <div id="lobby-box">
 
+            <!-- SCREEN 1: Lobby Browser -->
             <div id="lobby-browser-screen">
                 <h2>🌐 Online Lobbies</h2>
                 <p>Join an existing lobby or create your own</p>
@@ -572,6 +573,7 @@
                 <button class="lobby-back-btn" onclick="closeLobby()">← Back to Main Menu</button>
             </div>
 
+            <!-- SCREEN 2: Create a Lobby -->
             <div id="lobby-create-screen" style="display:none;">
                 <h2>🎲 Create Lobby</h2>
                 <p>Set your name and lobby title</p>
@@ -586,6 +588,7 @@
                 <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Back</button>
             </div>
 
+            <!-- SCREEN 3: Enter name to request joining -->
             <div id="lobby-request-screen" style="display:none;">
                 <h2>🚪 Request to Join</h2>
                 <p id="lobby-request-subtitle">Enter your name to send a join request</p>
@@ -595,20 +598,1685 @@
                     <input type="color" id="request-color-input" value="#448AFF" />
                 </div>
                 <div class="lobby-msg" id="lobby-request-msg"></div>
-                <button class="btn-large" style="width:100%;margin-top:0;" onclick="sendJoinRequest()">SEND REQUEST 🚪</button>
-                <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Cancel</button>
+                <button class="btn-large" style="width:100%;margin-top:0;" onclick="doRequestJoin()">SEND REQUEST ✉️</button>
+                <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Back</button>
+            </div>
+
+            <!-- SCREEN 4: Waiting for host approval -->
+            <div id="lobby-pending-screen" style="display:none;">
+                <h2>⏳ Request Sent!</h2>
+                <p id="lobby-pending-subtitle">Waiting for the host to approve your request...</p>
+                <div style="font-size:48px;margin:20px 0;">🎲</div>
+                <div class="lobby-msg" id="lobby-pending-msg"></div>
+                <button class="lobby-back-btn" onclick="cancelJoinRequest()">Cancel Request</button>
+            </div>
+
+            <!-- SCREEN 5: Waiting room (after approved / after creating) -->
+            <div id="lobby-waiting-screen" style="display:none;">
+                <h2 id="lobby-title">Lobby</h2>
+                <p id="lobby-subtitle">Share this page link with friends!</p>
+                <div id="lobby-player-list"></div>
+                <p id="lobby-waiting-msg">Waiting for host to start the game...</p>
+                <button id="lobby-start-btn" class="btn-large" style="width:100%;display:none;" onclick="hostStartGame()">START GAME 🎲</button>
+                <button class="lobby-back-btn" style="margin-top:14px;" onclick="leaveLobby()">← Leave Lobby</button>
             </div>
 
         </div>
     </div>
 
+    <!-- JOIN REQUEST POPUPS (shown to host) -->
+    <div id="join-request-popup"></div>
+
+    <div id="case-opening-modal">
+        <h2 style="color: #FFD700; margin-bottom: 30px; font-size: 36px; text-shadow: 0 0 20px #FFD700;">Opening Case...</h2>
+        <div class="case-window-container">
+            <div class="case-target-line"></div>
+            <div id="case-slider-strip"></div>
+        </div>
+        <div id="case-opening-result"></div>
+        <button id="close-case-btn" onclick="closeCaseAnimation()">Collect Item</button>
+    </div>
+
+    <div id="spinner-overlay">
+        <h2 style="color: white; font-size: 40px; margin-bottom: 30px;">Deciding who goes first...</h2>
+        <div class="spinner-box" id="spinner-result">Player 1</div>
+        <div class="spinner-text">Spinning</div>
+    </div>
+
+    <h1>Dumpster Dice</h1>
+    
+    <div id="main-menu">
+        
+        <div class="menu-panel">
+            <h2>Game Setup</h2>
+            <div class="menu-row" style="border-left-color: #FF9800; background: #2a1b0a;">
+                <h3 style="color: #FFb74D; margin: 0; width: 120px; text-align: left;">Game Mode</h3>
+                <div class="menu-controls">
+                    <select id="game-mode-select" onchange="updateRulesDisplay()">
+                        <option value="basic">Basic Game</option>
+                        <option value="tidy">Tidy Trash</option>
+                        <option value="dash">Dump & Dash</option>
+                        <option value="battle">Bin Battle</option>
+                        <option value="war">Waste War</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0;">
+                <label style="font-size: 18px; font-weight: bold; margin-right: 10px;">Number of Players:</label>
+                <select id="player-count-select" onchange="generateMenuRows()">
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4" selected>4 Players</option>
+                </select>
+            </div>
+
+            <div id="player-configs"></div>
+
+            <div id="rank-up-warning">⚠️ RANK UP GAME DETECTED! ⚠️</div>
+
+            <div class="audio-btn-row">
+                <button class="audio-toggle" id="music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
+                <button class="audio-toggle" id="sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
+            </div>
+            <br>
+            <button class="btn-large" onclick="startGame()">START GAME 🎲</button>
+            <button class="btn-large" style="background: linear-gradient(180deg, #448AFF, #1565C0); border-color: #0D47A1; box-shadow: 0 6px 0 #0D47A1, 0 10px 20px rgba(0,0,0,0.5);" onclick="openLobby()">PLAY ONLINE 🌐</button>
+            <button class="btn-large" id="admin-btn" style="display:none;" onclick="openAdmin()">ADMIN ⚙️</button>
+        </div>
+
+        <div class="menu-panel" style="border-color: #8BC34A;">
+            <h2 style="color: #8BC34A; text-shadow: 0 0 10px rgba(139, 195, 74, 0.5); margin-top: 0;">How To Play</h2>
+            <div id="rules-text" style="min-height: 120px; font-size: 16px;"></div>
+            <hr style="border-color: #444; margin: 20px 0;">
+            <h2 style="color: #00E5FF; text-shadow: 0 0 10px rgba(0, 229, 255, 0.5); margin-top: 0;">Ranked Leaderboard</h2>
+            <ul class="leaderboard-list" id="leaderboard-list"></ul>
+        </div>
+
+        <div class="menu-panel" style="border-color: #FFD700;">
+            <div class="shop-header">
+                <h2 style="margin: 0; color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);">Charm Shop</h2>
+                <div class="wallet">💵 $<span id="wallet-balance">0</span></div>
+            </div>
+            
+            <p style="color: #aaa; margin-top: -5px; margin-bottom: 15px;">Win matches to earn money. Rank up for $25!</p>
+            
+            <div class="shop-cases">
+                <button class="case-btn case-common" onclick="buyCase(25)">Common Case<br>$25
+                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💩 40%</div><div>🪰 25%</div><div>🧻 17%</div><div>🍌 11%</div><div>🐟 6%</div></div><div class="tooltip-chase">1% Chance: 👽</div></div>
+                </button>
+                <button class="case-btn case-rare" onclick="buyCase(50)">Rare Case<br>$50
+                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>🍔 40%</div><div>🍕 25%</div><div>🌭 17%</div><div>🌮 11%</div><div>🍟 6%</div></div><div class="tooltip-chase">1% Chance: 🦖</div></div>
+                </button>
+                <button class="case-btn case-epic" onclick="buyCase(100)">Epic Case<br>$100
+                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💎 40%</div><div>👑 25%</div><div>🏆 17%</div><div>🌟 11%</div><div>🌈 6%</div></div><div class="tooltip-chase">1% Chance: 🌌</div></div>
+                </button>
+            </div>
+
+            <h3 style="margin-bottom: 10px; color: #ddd; text-align: left;">Your Charms</h3>
+            <div class="inventory-grid" id="inventory-grid"></div>
+            <div id="shop-message" style="height: 20px; margin-top: 10px; font-weight: bold; color: #8BC34A;"></div>
+        </div>
+
+        <div class="menu-panel" style="border-color: #00E5FF;">
+            <h2 style="color: #00E5FF; margin-top: 0;">Daily Challenges</h2>
+            <div id="challenges-container" style="text-align: left; background: #111; padding: 15px; border-radius: 10px; border: 2px solid #444;"></div>
+            <p style="color: #aaa; font-size: 12px;">Challenges reset when you refresh!</p>
+        </div>
+
+    </div>
+
+    <div id="game-ui">
+        <div class="in-game-header">
+            <button class="header-btn" onclick="goToMainMenu()">🔙 Main Menu</button>
+            <button class="header-btn" id="in-game-music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
+            <button class="header-btn" id="in-game-sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
+        </div>
+
+        <div class="central-hub" id="hub">
+            <h2 style="margin-top:0;">Shared Track</h2>
+            <div class="board" id="shared-board"></div>
+            <div class="dumpster" id="dumpster-box">
+                🗑️ Dumpster: <span id="dumpster-count">0</span>
+            </div>
+        </div>
+
+        <div id="action-log">Waiting to start...</div>
+        <br>
+        <button id="roll-btn" class="btn-large" style="width: auto;" onclick="executeRoll()">ROLL DICE</button>
+
+        <div id="game-over-controls" style="display: none; margin-top: 20px;">
+            <h3 id="streak-display" style="color: #FFD700; margin-bottom: 10px; display: none;">🔥 Win Streak: <span id="streak-count">0</span> (x<span id="streak-mult">1</span> Bonus!)</h3>
+            <button id="don-btn" class="btn-large" style="background: linear-gradient(180deg, #D50000, #9b0000); border-color: #5c0000; display: none; width: auto;" onclick="startDoubleOrNothing()">DOUBLE OR NOTHING 🎲💀</button>
+            <br>
+            <button class="btn-large" style="width: auto;" onclick="playAgain()">PLAY AGAIN 🔄</button>
+            <button class="btn-large btn-menu" onclick="goToMainMenu()">MAIN MENU 🏠</button>
+        </div>
+
+        <div class="game-container" id="game-container"></div>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div id="chat-panel">
+        <button id="chat-toggle-btn" onclick="toggleChat()">💬 CHAT</button>
+        <div id="chat-box">
+            <div id="chat-messages"></div>
+            <div id="chat-input-row">
+                <input id="chat-input" type="text" placeholder="Say something..." maxlength="100"
+                    onkeydown="if(event.key==='Enter') sendChat()" />
+                <button id="chat-send-btn" onclick="sendChat()">SEND</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script>
-        // 1. Correct Socket Connection for Render
+        /* --- SOCKET.IO SETUP --- */
         const socket = io();
 
-        // 2. PASTE YOUR ORIGINAL JAVASCRIPT BELOW THIS LINE:
-        
+        let amIHost = false;
+        let mySocketId = null;
+        let myPlayerIndex = -1;
+        let isLobbyGame = false;
+        let lobbyPlayerList = [];
+        let clientHumanPlayerMap = {};
+        let isWaitingForExternalRoll = false;
+        let pendingHumanRollCallback = null;
+        let stateSyncTimer = null;
+        let lastTurnNotified = -1;
+        let myRoomId = null;
+        let pendingJoinRoomId = null;
+        let loggedInUser = null;
 
+        socket.on('connect', () => {
+            mySocketId = socket.id;
+            console.log('Connected to server:', socket.id);
+        });
+
+        /* --- AUTH HANDLERS --- */
+        function doLogin() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!username || !password) { setAuthMsg('Enter username and password'); return; }
+            setAuthMsg('Signing in…', false);
+            socket.emit('login', { username, password });
+        }
+
+        function doRegister() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!username || !password) { setAuthMsg('Enter username and password'); return; }
+            if (password.length < 4) { setAuthMsg('Password must be at least 4 characters'); return; }
+            setAuthMsg('Creating account…', false);
+            socket.emit('register', { username, password });
+        }
+
+        function setAuthMsg(msg, isError = true) {
+            const el = document.getElementById('auth-msg');
+            el.innerText = msg;
+            el.className = isError ? '' : 'success';
+        }
+
+        socket.on('authSuccess', (profile) => {
+            loggedInUser = profile;
+            applyServerProfile(profile);
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+            generateMenuRows();
+            loadStats(); loadEconomy(); renderChallenges(); checkRankUpStatus();
+            if (profile.username === 'Bingle Berry') {
+                document.getElementById('admin-btn').style.display = 'inline-block';
+            }
+            console.log('Logged in as:', profile.username);
+        });
+
+        socket.on('authError', (msg) => {
+            setAuthMsg(msg);
+        });
+
+        function applyServerProfile(profile) {
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            stats[profile.username] = { mmr: profile.mmr, wins: profile.wins, losses: profile.losses };
+            localStorage.setItem('dumpsterStats', JSON.stringify(stats));
+            localStorage.setItem('dumpsterMoney', profile.money);
+            localStorage.setItem('dumpsterInventory', JSON.stringify(profile.inventory));
+            if (profile.equippedCharm) localStorage.setItem('dumpsterEquippedCharm', profile.equippedCharm);
+            else localStorage.removeItem('dumpsterEquippedCharm');
+        }
+
+        /* --- ADMIN FUNCTIONS --- */
+        function openAdmin() {
+            document.getElementById('admin-overlay').style.display = 'flex';
+            document.getElementById('admin-msg').innerText = '';
+            document.getElementById('admin-user-list').innerHTML = '<div style="color:#666;">Loading...</div>';
+            socket.emit('adminGetUsers', { username: loggedInUser.username });
+        }
+
+        function closeAdmin() {
+            document.getElementById('admin-overlay').style.display = 'none';
+        }
+
+        function adminConfirmDelete(targetUsername) {
+            if (!confirm(`Delete account "${targetUsername}"? This cannot be undone.`)) return;
+            socket.emit('adminDeleteUser', { adminUsername: loggedInUser.username, targetUsername });
+        }
+
+        socket.on('adminUsersList', (users) => {
+            const list = document.getElementById('admin-user-list');
+            if (!list) return;
+            if (users.length === 0) { list.innerHTML = '<div style="color:#666;">No accounts found.</div>'; return; }
+            list.innerHTML = '';
+            users.forEach(u => {
+                const isAdmin = u.username === 'Bingle Berry';
+                const date = new Date(u.created_at).toLocaleDateString();
+                list.innerHTML += `
+                    <div class="admin-user-row">
+                        <div class="admin-user-info">
+                            <div class="admin-user-name">${u.username}${isAdmin ? ' 👑' : ''}</div>
+                            <div class="admin-user-meta">MMR: ${u.mmr} &nbsp;·&nbsp; Wins: ${u.wins} &nbsp;·&nbsp; 💵 $${u.money} &nbsp;·&nbsp; Joined: ${date}</div>
+                        </div>
+                        ${!isAdmin ? `<button class="admin-del-btn" onclick="adminConfirmDelete('${u.username}')">🗑 Delete</button>` : '<span style="color:#888;font-size:12px;">ADMIN</span>'}
+                    </div>`;
+            });
+        });
+
+        socket.on('adminDeleteSuccess', (deletedName) => {
+            document.getElementById('admin-msg').innerText = `✓ Deleted "${deletedName}"`;
+            socket.emit('adminGetUsers', { username: loggedInUser.username });
+        });
+
+        socket.on('adminError', (msg) => {
+            document.getElementById('admin-msg').innerText = '⚠️ ' + msg;
+        });
+
+        function syncProfile() {
+            if (!loggedInUser) return;
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const pData = stats[loggedInUser.username] || { mmr: 0, wins: 0, losses: 0 };
+            const money = parseInt(localStorage.getItem('dumpsterMoney')) || 0;
+            const inventory = JSON.parse(localStorage.getItem('dumpsterInventory')) || [];
+            const equippedCharm = localStorage.getItem('dumpsterEquippedCharm') || null;
+            socket.emit('saveProfile', {
+                username: loggedInUser.username,
+                money, mmr: pData.mmr || 0,
+                wins: pData.wins || 0,
+                losses: pData.losses || 0,
+                inventory, equippedCharm
+            });
+            loggedInUser = { ...loggedInUser, money, mmr: pData.mmr || 0, inventory, equippedCharm };
+        }
+
+        /* --- LOBBY LIST (multi-room browser) --- */
+        socket.on('lobbyList', (list) => {
+            const container = document.getElementById('lobby-list-container');
+            const countEl = document.getElementById('lobby-rooms-count');
+            if (!container) return;
+            countEl.innerText = `${list.length} / 5 lobbies active`;
+            if (list.length === 0) {
+                container.innerHTML = '<div id="lobby-empty-msg">No lobbies yet — be the first to create one!</div>';
+                return;
+            }
+            container.innerHTML = '';
+            list.forEach(room => {
+                const full = room.playerCount >= room.maxPlayers;
+                const started = room.gameStarted;
+                const disabled = full || started;
+                container.innerHTML += `
+                    <div class="lobby-list-item">
+                        <div class="lobby-list-info">
+                            <div class="lobby-list-name">${room.name}</div>
+                            <div class="lobby-list-meta">Host: ${room.hostName} &nbsp;·&nbsp; ${room.playerCount}/${room.maxPlayers} players</div>
+                            ${started ? '<div class="lobby-list-started">In Progress</div>' : ''}
+                        </div>
+                        <button class="lobby-join-btn" ${disabled ? 'disabled' : ''} onclick="openJoinRequest('${room.id}','${room.name}')">
+                            ${started ? 'Started' : full ? 'Full' : 'Join'}
+                        </button>
+                    </div>`;
+            });
+        });
+
+        socket.on('joinedLobby', ({ isHost, roomId }) => {
+            amIHost = isHost;
+            myRoomId = roomId;
+            showLobbyScreen('lobby-waiting-screen');
+            if (isHost) {
+                document.getElementById('lobby-title').innerText = 'You are the Host 👑';
+                document.getElementById('lobby-subtitle').innerText = 'Others can request to join. Start when ready!';
+                document.getElementById('lobby-start-btn').style.display = 'block';
+                document.getElementById('lobby-waiting-msg').style.display = 'none';
+            } else {
+                document.getElementById('lobby-title').innerText = "You're in! ✅";
+                document.getElementById('lobby-subtitle').innerText = 'Waiting for the host to start…';
+            }
+        });
+
+        socket.on('joinApproved', ({ roomId }) => {
+            myRoomId = roomId;
+            pendingJoinRoomId = null;
+            amIHost = false;
+            showLobbyScreen('lobby-waiting-screen');
+            document.getElementById('lobby-title').innerText = "You're in! ✅";
+            document.getElementById('lobby-subtitle').innerText = 'Waiting for the host to start…';
+        });
+
+        socket.on('joinDenied', (reason) => {
+            pendingJoinRoomId = null;
+            showLobbyScreen('lobby-browser-screen');
+            document.getElementById('lobby-browser-msg').innerText = reason || 'Request denied.';
+            setTimeout(() => { document.getElementById('lobby-browser-msg').innerText = ''; }, 4000);
+        });
+
+        socket.on('joinPending', ({ hostName }) => {
+            showLobbyScreen('lobby-pending-screen');
+            document.getElementById('lobby-pending-subtitle').innerText =
+                `Waiting for ${hostName} to approve your request…`;
+        });
+
+        socket.on('joinRequest', ({ socketId, name, color, roomId }) => {
+            const popup = document.getElementById('join-request-popup');
+            const card = document.createElement('div');
+            card.className = 'join-req-card';
+            card.id = `req-${socketId}`;
+            card.innerHTML = `
+                <div class="join-req-name"><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${color};vertical-align:middle;margin-right:6px;"></span>${name}</div>
+                <div class="join-req-sub">wants to join your lobby</div>
+                <div class="join-req-btns">
+                    <button class="join-req-accept" onclick="respondToJoin('${roomId}','${socketId}',true)">✓ Accept</button>
+                    <button class="join-req-deny"   onclick="respondToJoin('${roomId}','${socketId}',false)">✗ Deny</button>
+                </div>`;
+            popup.appendChild(card);
+            setTimeout(() => { if (card.parentNode) card.parentNode.removeChild(card); }, 30000);
+        });
+
+        socket.on('lobbyUpdate', ({ players }) => {
+            lobbyPlayerList = players;
+            const list = document.getElementById('lobby-player-list');
+            if (!list) return;
+            list.innerHTML = '';
+            players.forEach(p => {
+                list.innerHTML += `
+                    <div class="lobby-player-row">
+                        <div class="lobby-swatch" style="background:${p.color}"></div>
+                        <span>${p.name}</span>
+                        ${p.isHost ? '<span class="lobby-badge">HOST</span>' : ''}
+                        ${p.socketId === mySocketId ? '<span class="lobby-you-badge">YOU</span>' : ''}
+                    </div>`;
+            });
+        });
+
+        socket.on('hostChanged', ({ newHostName }) => {
+            if (!isLobbyGame) addSystemChat(`👑 ${newHostName} is now the host`);
+        });
+
+        socket.on('gameStarted', ({ gameMode: mode, humanPlayerMap }) => {
+            clientHumanPlayerMap = humanPlayerMap || {};
+            myPlayerIndex = -1;
+            for (let idx in clientHumanPlayerMap) {
+                if (clientHumanPlayerMap[idx] === mySocketId) { myPlayerIndex = parseInt(idx); break; }
+            }
+            isLobbyGame = true;
+            document.getElementById('lobby-overlay').style.display = 'none';
+            if (!amIHost) initGameAsClient(mode);
+            showChatPanel();
+        });
+
+        socket.on('yourTurn', () => {
+            if (!amIHost && gameActive) {
+                const btn = document.getElementById('roll-btn');
+                btn.disabled = false; btn.classList.add('human-turn');
+                logAction("🎲 It's YOUR turn! Click ROLL!");
+            }
+        });
+
+        socket.on('rollResult', (data) => {
+            if (amIHost) {
+                if (pendingHumanRollCallback) {
+                    let cb = pendingHumanRollCallback;
+                    pendingHumanRollCallback = null;
+                    cb(data.roll);
+                } else if (isWaitingForExternalRoll) {
+                    isWaitingForExternalRoll = false;
+                    isProcessing = true; updateControls();
+                    processRollAction(currentPlayer, () => {
+                        isProcessing = false; render(); updateControls(); checkBotTurn();
+                    }, data.roll);
+                }
+            } else if (gameActive && players.length > 0) {
+                for (let idx in clientHumanPlayerMap) {
+                    if (clientHumanPlayerMap[idx] === data.playerID && players[parseInt(idx)]) {
+                        spawnRollAnimation(data.roll, parseInt(idx)); break;
+                    }
+                }
+                const btn = document.getElementById('roll-btn');
+                btn.disabled = true; btn.classList.remove('human-turn');
+            }
+        });
+
+        socket.on('stateSync', (state) => {
+            if (amIHost) return;
+            players = state.players;
+            sharedBoard = state.sharedBoard;
+            dumpsterTotal = state.dumpsterTotal;
+            currentPlayer = state.currentPlayer;
+            gameActive = state.gameActive;
+            if (state.gameMode) gameMode = state.gameMode;
+            render();
+            if (!gameActive) {
+                document.getElementById('roll-btn').style.display = 'none';
+                document.getElementById('game-over-controls').style.display = 'block';
+                logAction(state.actionLog || 'Game over!');
+            }
+        });
+
+        socket.on('lobbyError', (msg) => {
+            document.getElementById('lobby-create-msg').innerText = msg;
+            document.getElementById('lobby-request-msg').innerText = msg;
+            document.getElementById('lobby-browser-msg').innerText = msg;
+        });
+
+        socket.on('lobbyClosed', ({ reason }) => {
+            isLobbyGame = false; amIHost = false; isWaitingForExternalRoll = false;
+            myPlayerIndex = -1; clientHumanPlayerMap = {}; lastTurnNotified = -1;
+            if (gameActive) {
+                gameActive = false; isProcessing = false; clearDashBots(); stopMusic();
+                document.getElementById('game-ui').style.display = 'none';
+                document.getElementById('spinner-overlay').style.display = 'none';
+                document.getElementById('chat-panel').style.display = 'none';
+                document.getElementById('main-menu').style.display = 'flex';
+                loadStats(); loadEconomy(); renderChallenges();
+                alert(`⚠️ The lobby was closed: ${reason}`);
+            } else {
+                document.getElementById('lobby-overlay').style.display = 'none';
+                document.getElementById('chat-panel').style.display = 'none';
+            }
+        });
+
+        socket.on('chatMessage', ({ name, color, text }) => {
+            const msgs = document.getElementById('chat-messages');
+            if (!msgs) return;
+            const div = document.createElement('div');
+            div.className = 'chat-msg';
+            div.innerHTML = `<span class="chat-name" style="color:${color}">${name}:</span> <span class="chat-text">${text}</span>`;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        });
+
+        /* --- GAME RULES SYSTEM --- */
+        const modeRules = {
+            'basic': "<span class='rules-title'>Basic Game</span><br>Take turns rolling! Claim an empty slot matching your roll. If you roll a number already claimed, your dice goes straight to the Dumpster! First to clear board gets the Pot (+6). Last player with dice wins!",
+            'tidy': "<span class='rules-title'>Tidy Trash</span><br>A test of patience. The board MUST be filled in exact numerical order (1, 2, 3...). Roll out of sequence? Trashed!",
+            'dash': "<span class='rules-title'>Dump & Dash</span><br>A real-time chaos round! Everyone plays simultaneously. Hesitate for 3 seconds? Lose 5 dice instantly! Out-speed your opponents.",
+            'battle': "<span class='rules-title'>Bin Battle</span><br>A competitive tug-of-war! If you roll a claimed number, you trigger a BATTLE. 50% chance to steal the slot and trash their dice, 50% chance your dice gets trashed.",
+            'war': "<span class='rules-title'>Waste War</span><br>Tactical attrition. Successfully claiming an empty slot instantly drains 1 die from the next active player into the dumpster! Drain their pools."
+        };
+
+        function updateRulesDisplay() {
+            const mode = document.getElementById('game-mode-select').value;
+            document.getElementById('rules-text').innerHTML = modeRules[mode];
+        }
+
+        /* --- RANKED SYSTEM --- */
+        function getRank(mmr) {
+            const tiers = [
+                { name: "Copper", color: "#AE644B" }, { name: "Bronze", color: "#925A39" },
+                { name: "Silver", color: "#C0C0C0" }, { name: "Gold", color: "#FFD700" },
+                { name: "Platinum", color: "#00E5FF" }, { name: "Emerald", color: "#50C878" },
+                { name: "Diamond", color: "#B9F2FF" }
+            ];
+            
+            if (mmr >= 3500) return { name: "Champion", index: 7, color: "#FF0055", nextThreshold: Infinity };
+            
+            let tierIndex = Math.floor(mmr / 500);
+            if (tierIndex > 6) tierIndex = 6;
+            
+            let stageMmr = mmr % 500;
+            let stage = 5 - Math.floor(stageMmr / 100); 
+            let nextThreshold = (Math.floor(mmr / 100) + 1) * 100;
+            
+            return {
+                name: `${tiers[tierIndex].name} ${stage}`,
+                index: tierIndex,
+                color: tiers[tierIndex].color,
+                nextThreshold: nextThreshold
+            };
+        }
+
+        function checkRankUpStatus() {
+            const nameInput = document.getElementById('p0-name');
+            const name = nameInput ? (nameInput.value || 'Player 1') : 'Player 1';
+            let stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            let pData = stats[name];
+            let mmr = pData ? (pData.mmr || 0) : 0;
+            
+            let currentRank = getRank(mmr);
+            const warningBox = document.getElementById('rank-up-warning');
+
+            const playerCount = parseInt(document.getElementById('player-count-select').value) || 2;
+            const baseWinMmr = 15 + (playerCount * 10); 
+
+            if (currentRank.nextThreshold !== Infinity && (mmr + baseWinMmr) >= currentRank.nextThreshold) {
+                warningBox.style.display = 'block';
+            } else {
+                warningBox.style.display = 'none';
+            }
+        }
+
+        function loadStats() {
+            checkRankUpStatus();
+            if (loggedInUser) {
+                socket.emit('getLeaderboard');
+            } else {
+                renderLeaderboardLocal();
+            }
+        }
+
+        function renderLeaderboardLocal() {
+            let stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const listEl = document.getElementById('leaderboard-list');
+            listEl.innerHTML = "";
+            let formattedStats = [];
+            for (let name in stats) {
+                let data = stats[name];
+                if (typeof data === 'number') { data = { mmr: data * 35 }; stats[name] = data; localStorage.setItem('dumpsterStats', JSON.stringify(stats)); }
+                formattedStats.push({ name: name, mmr: data.mmr });
+            }
+            let sortedStats = formattedStats.sort((a, b) => b.mmr - a.mmr);
+            if (sortedStats.length === 0) {
+                listEl.innerHTML = "<div style='color:#777; text-align:center; padding: 10px;'>Unranked. Play a match to place!</div>";
+                return;
+            }
+            sortedStats.slice(0, 10).forEach((stat) => {
+                let rank = getRank(stat.mmr);
+                listEl.innerHTML += `<li class="leaderboard-item" style="border-color: ${rank.color}; padding: 8px 15px;">
+                    <div style="display: flex; align-items: center;"><span class="rank-badge" style="background-color: ${rank.color}">${rank.name}</span><span>${stat.name}</span></div>
+                    <span style="color: ${rank.color}">${stat.mmr} MMR</span></li>`;
+            });
+        }
+
+        socket.on('leaderboardData', (rows) => {
+            const listEl = document.getElementById('leaderboard-list');
+            if (!listEl) return;
+            if (rows.length === 0) {
+                listEl.innerHTML = "<div style='color:#777; text-align:center; padding: 10px;'>No ranked players yet!</div>";
+                return;
+            }
+            listEl.innerHTML = '';
+            rows.forEach((row, i) => {
+                let rank = getRank(row.mmr);
+                const isMe = loggedInUser && row.username === loggedInUser.username;
+                listEl.innerHTML += `<li class="leaderboard-item" style="border-color: ${rank.color}; padding: 8px 15px; ${isMe ? 'background:rgba(255,255,255,0.05);' : ''}">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="color:#555; font-size:12px; width:18px;">#${i+1}</span>
+                        <span class="rank-badge" style="background-color: ${rank.color}">${rank.name}</span>
+                        <span>${row.username}${isMe ? ' 👤' : ''}</span>
+                    </div>
+                    <span style="color: ${rank.color}">${row.mmr} MMR</span></li>`;
+            });
+        });
+
+        /* --- CHEAT CODE SYSTEM --- */
+        let secretBuffer = "";
+        let secretMrkBuffer = "";
+        let secretResetBuffer = "";
+        let godMode = false;
+
+        document.addEventListener('keydown', (e) => {
+            // Prevent triggers if user is typing inside an input field (like a player name)
+            if (e.target.tagName.toLowerCase() === 'input') return;
+
+            // "5708" God Mode
+            if (!isNaN(e.key) && e.key.trim() !== '') {
+                secretBuffer += e.key;
+                if (secretBuffer.length > 4) secretBuffer = secretBuffer.slice(-4);
+                if (secretBuffer === "5708") {
+                    activateGodMode();
+                    secretBuffer = ""; 
+                }
+            }
+
+            // Letter-based codes ("mrk" and "reset")
+            if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+                let char = e.key.toLowerCase();
+                
+                // Secret "mrk" code
+                secretMrkBuffer += char;
+                if (secretMrkBuffer.length > 3) secretMrkBuffer = secretMrkBuffer.slice(-3);
+                if (secretMrkBuffer === "mrk") {
+                    if (!playerInventory.includes('🤖')) {
+                        playerInventory.push('🤖');
+                        saveEconomy();
+                        updateShopUI();
+                        if(sfxEnabled) sfxClaim();
+                        alert("??? SECRET UNLOCKED ???\nYou found the Robot Charm!");
+                    }
+                    secretMrkBuffer = "";
+                }
+
+                // Secret "reset" code
+                secretResetBuffer += char;
+                if (secretResetBuffer.length > 5) secretResetBuffer = secretResetBuffer.slice(-5);
+                if (secretResetBuffer === "reset") {
+                    hardResetGame();
+                    secretResetBuffer = "";
+                }
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (gameActive && loggedInUser) {
+                navigator.sendBeacon('/api/abandon-penalty',
+                    new Blob([JSON.stringify({ username: loggedInUser.username })], { type: 'application/json' })
+                );
+            }
+        });
+
+        function activateGodMode() {
+            if (godMode) return; 
+            godMode = true;
+            playerCheatChance = 1.0; 
+            
+            let allCharms = [];
+            for (let cost in cases) {
+                allCharms.push(cases[cost].chase);
+                cases[cost].pool.forEach(item => allCharms.push(item.c)); 
+            }
+            
+            allCharms.forEach(charm => { if (!playerInventory.includes(charm)) playerInventory.push(charm); });
+            if (!playerInventory.includes('🤖')) playerInventory.push('🤖');
+
+            saveEconomy();
+            if (document.getElementById('main-menu').style.display !== 'none') updateShopUI();
+            
+            if (sfxEnabled) sfxPotWin();
+            alert("✨ GOD MODE ACTIVATED ✨\nAll charms unlocked. 100% win rate engaged!");
+        }
+
+        function hardResetGame() {
+            let confirmReset = confirm("⚠️ WARNING: Are you sure you want to completely reset ALL stats, MMR, money, and inventory? This cannot be undone!");
+            
+            if (confirmReset) {
+                // Clear all local storage for this domain to ensure a completely clean slate
+                localStorage.clear();
+                
+                alert("All data wiped. Reloading Dumpster Dice...");
+                location.reload(); 
+            }
+        }
+
+        /* --- DAILY CHALLENGES --- */
+        let challenges = [];
+        const challengeTemplates = [
+            { id: 'roll_25', desc: 'Roll 25 Dice', target: 25, rewardType: 'money', rewardVal: 50 },
+            { id: 'win_3', desc: 'Win 3 Games', target: 3, rewardType: 'money', rewardVal: 100 },
+            { id: 'earn_500', desc: 'Earn $500', target: 500, rewardType: 'crate', rewardVal: 100 }, 
+            { id: 'open_1', desc: 'Open 1 Crate', target: 1, rewardType: 'money', rewardVal: 25 },
+            { id: 'win_don', desc: 'Win Double or Nothing', target: 1, rewardType: 'crate', rewardVal: 50 }, 
+            { id: 'streak_3', desc: 'Get a 3 Win Streak', target: 3, rewardType: 'money', rewardVal: 150 }
+        ];
+
+        function initChallenges() {
+            let saved = JSON.parse(localStorage.getItem('dumpsterDailies'));
+            if (!saved || saved.length === 0) {
+                challenges = [];
+                let shuffled = challengeTemplates.sort(() => 0.5 - Math.random());
+                for(let i=0; i<3; i++) {
+                    challenges.push({ ...shuffled[i], progress: 0, claimed: false });
+                }
+                saveChallenges();
+            } else {
+                challenges = saved;
+            }
+            renderChallenges();
+        }
+
+        function saveChallenges() { localStorage.setItem('dumpsterDailies', JSON.stringify(challenges)); }
+
+        function progressChallenge(id, amount = 1, setAbsolute = false) {
+            let updated = false;
+            challenges.forEach(c => {
+                if (c.id === id && !c.claimed) {
+                    if (setAbsolute) {
+                        if (amount > c.progress) { c.progress = amount; updated = true; }
+                    } else {
+                        c.progress += amount; updated = true;
+                    }
+                    if (c.progress > c.target) c.progress = c.target;
+                }
+            });
+            if (updated) { saveChallenges(); renderChallenges(); }
+        }
+
+        function claimChallenge(index) {
+            let c = challenges[index];
+            if (c.progress >= c.target && !c.claimed) {
+                c.claimed = true;
+                if (c.rewardType === 'money') {
+                    playerMoney += c.rewardVal;
+                    alert(`Claimed! +$${c.rewardVal}`);
+                } else if (c.rewardType === 'crate') {
+                    alert(`Claimed! Opening your free crate...`);
+                    buyCase(c.rewardVal, true); 
+                }
+                saveChallenges();
+                saveEconomy();
+                updateShopUI();
+                renderChallenges();
+            }
+        }
+
+        function renderChallenges() {
+            const container = document.getElementById('challenges-container');
+            if(!container) return;
+            container.innerHTML = "";
+            challenges.forEach((c, i) => {
+                let isDone = c.progress >= c.target;
+                let rewardText = c.rewardType === 'money' ? `$${c.rewardVal}` : 'Free Crate';
+                let btnHTML = '';
+                if (c.claimed) btnHTML = `<span style="color: #50C878; font-weight: bold;">✅ Claimed</span>`;
+                else if (isDone) btnHTML = `<button style="background: #8BC34A; color: black; font-weight: bold; padding: 5px 10px; border-radius: 5px; cursor: pointer;" onclick="claimChallenge(${i})">Claim</button>`;
+                else btnHTML = `<span style="color: #aaa;">${c.progress} / ${c.target}</span>`;
+
+                container.innerHTML += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #333;">
+                        <div>
+                            <div style="font-weight: bold; color: ${isDone && !c.claimed ? '#FFD700' : '#ddd'};">${c.desc}</div>
+                            <div style="font-size: 12px; color: #888;">Reward: ${rewardText}</div>
+                        </div>
+                        <div>${btnHTML}</div>
+                    </div>
+                `;
+            });
+        }
+
+        /* --- ECONOMY & CHARMS SYSTEM --- */
+        let playerMoney = 0;
+        let playerInventory = [];
+        let equippedCharm = null;
+        let pendingRefund = 0;
+
+        const cases = {
+            25:  { cost: 25, pool: [{c:'💩', p: 40}, {c:'🪰', p: 25}, {c:'🧻', p: 17}, {c:'🍌', p: 11}, {c:'🐟', p: 6}], chase: '👽' },
+            50:  { cost: 50, pool: [{c:'🍔', p: 40}, {c:'🍕', p: 25}, {c:'🌭', p: 17}, {c:'🌮', p: 11}, {c:'🍟', p: 6}], chase: '🦖' },
+            100: { cost: 100, pool: [{c:'💎', p: 40}, {c:'👑', p: 25}, {c:'🏆', p: 17}, {c:'🌟', p: 11}, {c:'🌈', p: 6}], chase: '🌌' }
+        };
+
+        function getCharmRarityInfo(charm) {
+            if (charm === '🤖') return { text: '??? Chance', class: 'charm-chase' }; 
+            for (let cost in cases) {
+                let caseData = cases[cost];
+                if (caseData.chase === charm) return { text: '1% Chance', class: 'charm-chase' };
+                for (let item of caseData.pool) {
+                    if (item.c === charm) {
+                        let cls = '';
+                        if (cost == 25) cls = 'charm-common';
+                        else if (cost == 50) cls = 'charm-rare';
+                        else if (cost == 100) cls = 'charm-epic';
+                        return { text: item.p + '% Chance', class: cls };
+                    }
+                }
+            }
+            return { text: 'Unknown', class: '' };
+        }
+
+        function loadEconomy() {
+            playerMoney = parseInt(localStorage.getItem('dumpsterMoney')) || 0;
+            playerInventory = JSON.parse(localStorage.getItem('dumpsterInventory')) || [];
+            equippedCharm = localStorage.getItem('dumpsterEquippedCharm') || null;
+            updateShopUI();
+        }
+
+        function saveEconomy() {
+            localStorage.setItem('dumpsterMoney', playerMoney);
+            localStorage.setItem('dumpsterInventory', JSON.stringify(playerInventory));
+            if(equippedCharm) localStorage.setItem('dumpsterEquippedCharm', equippedCharm);
+            else localStorage.removeItem('dumpsterEquippedCharm');
+            syncProfile();
+        }
+
+        function updateShopUI() {
+            document.getElementById('wallet-balance').innerText = playerMoney;
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = "";
+            
+            if(playerInventory.length === 0) {
+                grid.innerHTML = "<div style='color: #777; margin-top: 25px;'>Your inventory is empty.</div>";
+                return;
+            }
+
+            playerInventory.forEach(charm => {
+                let div = document.createElement('div');
+                let rarityInfo = getCharmRarityInfo(charm);
+                div.className = `charm-item ${rarityInfo.class} ${charm === equippedCharm ? 'equipped' : ''}`;
+                div.innerText = charm;
+                div.setAttribute('data-rarity', rarityInfo.text);
+                div.onclick = () => equipCharm(charm);
+                grid.appendChild(div);
+            });
+        }
+
+        function showShopMsg(msg, color="#8BC34A") {
+            const el = document.getElementById('shop-message');
+            el.innerText = msg; el.style.color = color;
+            setTimeout(() => { if(el.innerText === msg) el.innerText = ""; }, 3000);
+        }
+
+        function getRandomItemFromCase(caseData) {
+            let rand = Math.random() * 100;
+            if (rand < 1) return { item: caseData.chase, isChase: true };
+            let cumulative = 1;
+            for (let item of caseData.pool) {
+                cumulative += item.p;
+                if (rand < cumulative) return { item: item.c, isChase: false };
+            }
+            return { item: caseData.pool[0].c, isChase: false };
+        }
+
+        /* --- CASE OPENING ANIMATION LOGIC --- */
+        let caseTickInterval = null;
+
+        function buyCase(cost, isFree = false) {
+            if (!isFree && playerMoney < cost) {
+                showShopMsg("Not enough money!", "#FF5252");
+                return;
+            }
+            const caseData = cases[cost];
+            if (!isFree) playerMoney -= cost;
+            updateShopUI(); 
+            
+            progressChallenge('open_1', 1);
+
+            let winResult = getRandomItemFromCase(caseData);
+            let drop = winResult.item;
+            
+            pendingRefund = 0;
+            if (playerInventory.includes(drop)) pendingRefund = Math.floor(cost / 2);
+
+            triggerCaseAnimation(caseData, winResult);
+        }
+
+        function triggerCaseAnimation(caseData, winResult) {
+            const modal = document.getElementById('case-opening-modal');
+            const strip = document.getElementById('case-slider-strip');
+            const resultText = document.getElementById('case-opening-result');
+            const closeBtn = document.getElementById('close-case-btn');
+            
+            modal.style.display = 'flex';
+            strip.style.transition = 'none'; strip.style.transform = 'translateX(0)';
+            strip.innerHTML = ''; resultText.innerText = ''; closeBtn.style.display = 'none';
+
+            const totalItems = 50; const winningIndex = 40; 
+            
+            for (let i = 0; i < totalItems; i++) {
+                let box = document.createElement('div');
+                let rarityClass = ''; let charmText = '';
+
+                if (i === winningIndex) {
+                    charmText = winResult.item;
+                    rarityClass = getCharmRarityInfo(charmText).class;
+                    box.id = "winning-charm-box";
+                } else {
+                    let dummy = getRandomItemFromCase(caseData).item;
+                    charmText = dummy; rarityClass = getCharmRarityInfo(dummy).class;
+                }
+
+                box.className = `slider-charm-box ${rarityClass}`; box.innerText = charmText; strip.appendChild(box);
+            }
+
+            void strip.offsetWidth;
+            const itemWidth = 120; let randomOffset = (Math.random() * 80) - 40; 
+            const slideAmount = -((winningIndex * itemWidth) + (itemWidth / 2) - 400 + randomOffset);
+            const slideDuration = 5; 
+            
+            strip.style.transition = `transform ${slideDuration}s cubic-bezier(0.15, 0.9, 0.2, 1)`;
+            strip.style.transform = `translateX(${slideAmount}px)`;
+
+            if (sfxEnabled) {
+                let tickTime = 0; let tickDelay = 50;
+                caseTickInterval = setInterval(() => {
+                    sfxTick(); tickDelay += 15; 
+                    if (tickDelay > 400) clearInterval(caseTickInterval);
+                }, tickDelay);
+            }
+
+            setTimeout(() => {
+                if (caseTickInterval) clearInterval(caseTickInterval);
+                if (sfxEnabled) sfxClaim();
+
+                const winningBox = document.getElementById('winning-charm-box');
+                winningBox.classList.add('winning-item');
+
+                if (pendingRefund > 0) {
+                    playerMoney += pendingRefund;
+                    resultText.innerHTML = `Rolled a duplicate <span style="color:#FFD740">${winResult.item}</span>.<br>Refunded $${pendingRefund}!`;
+                    resultText.style.color = "#FFD740";
+                } else {
+                    playerInventory.push(winResult.item);
+                    if (winResult.isChase) { resultText.innerText = `🏆 INCREDIBLE! You unlocked the CHASE charm: ${winResult.item}!`; resultText.style.color = "#FF1744"; }
+                    else { resultText.innerText = `You unlocked a new charm: ${winResult.item}!`; resultText.style.color = "#8BC34A"; }
+                }
+
+                saveEconomy(); updateShopUI(); closeBtn.style.display = 'block';
+            }, slideDuration * 1000 + 100);
+        }
+
+        function closeCaseAnimation() { document.getElementById('case-opening-modal').style.display = 'none'; }
+
+        function equipCharm(charm) {
+            if(equippedCharm === charm) equippedCharm = null; 
+            else equippedCharm = charm;
+            saveEconomy(); updateShopUI();
+            if(sfxEnabled) sfxSpin();
+        }
+
+        /* --- AUDIO SYSTEM --- */
+        let audioCtx; let musicEnabled = false; let sfxEnabled = false; let musicInterval; let currentNote = 0;
+        let soundEnabled = false;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function updateAudioBtnLabels() {
+            const mMenu = document.getElementById('music-btn');
+            const sMenu = document.getElementById('sfx-btn');
+            const mGame = document.getElementById('in-game-music-btn');
+            const sGame = document.getElementById('in-game-sfx-btn');
+            if (mMenu) { mMenu.innerText = musicEnabled ? 'Music: ON 🎵' : 'Music: OFF 🎵'; musicEnabled ? mMenu.classList.add('on') : mMenu.classList.remove('on'); }
+            if (sMenu) { sMenu.innerText = sfxEnabled ? 'SFX: ON 🔔' : 'SFX: OFF 🔔'; sfxEnabled ? sMenu.classList.add('on') : sMenu.classList.remove('on'); }
+            if (mGame) { mGame.innerText = musicEnabled ? 'Music: ON 🎵' : 'Music: OFF 🎵'; musicEnabled ? mGame.classList.add('on') : mGame.classList.remove('on'); }
+            if (sGame) { sGame.innerText = sfxEnabled ? 'SFX: ON 🔔' : 'SFX: OFF 🔔'; sfxEnabled ? sGame.classList.add('on') : sGame.classList.remove('on'); }
+        }
+
+        function toggleMusic() {
+            musicEnabled = !musicEnabled;
+            soundEnabled = musicEnabled || sfxEnabled;
+            if (musicEnabled) { initAudio(); startMusic(); } else { stopMusic(); }
+            updateAudioBtnLabels();
+        }
+
+        function toggleSfx() {
+            sfxEnabled = !sfxEnabled;
+            soundEnabled = musicEnabled || sfxEnabled;
+            if (sfxEnabled) initAudio();
+            updateAudioBtnLabels();
+        }
+
+        function playTone(freq, type, duration, vol=0.1) {
+            if (!sfxEnabled || !audioCtx) return;
+            let osc = audioCtx.createOscillator(); let gain = audioCtx.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function sfxTick() { playTone(1200, 'square', 0.03, 0.02); } 
+        function sfxSpin() { playTone(800, 'sine', 0.05, 0.05); }
+        function sfxRoll() { playTone(300, 'square', 0.1, 0.05); }
+        function sfxTrash() { playTone(100, 'sawtooth', 0.4, 0.2); }
+        function sfxClaim() { playTone(600, 'sine', 0.1, 0.1); setTimeout(() => playTone(900, 'sine', 0.2, 0.1), 100); }
+        function sfxPotWin() { playTone(400, 'square', 0.1, 0.1); setTimeout(()=>playTone(500, 'square', 0.1, 0.1), 150); setTimeout(()=>playTone(600, 'square', 0.1, 0.1), 300); setTimeout(()=>playTone(800, 'square', 0.4, 0.15), 450); }
+        function sfxGameOver() { playTone(500, 'sine', 0.2, 0.1); setTimeout(()=>playTone(600, 'sine', 0.2, 0.1), 200); setTimeout(()=>playTone(700, 'sine', 0.2, 0.1), 400); setTimeout(()=>playTone(1000, 'sine', 0.8, 0.2), 600); }
+
+        function startMusic() {
+            if (!musicEnabled || !audioCtx) return;
+            stopMusic();
+            const notes = [150, 150, 200, 150, 220, 150, 180, 150];
+            musicInterval = setInterval(() => {
+                if (!musicEnabled) { stopMusic(); return; }
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(notes[currentNote], audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+                currentNote = (currentNote + 1) % notes.length;
+            }, (gameMode === 'dash') ? 150 : 250); 
+        }
+        function stopMusic() { clearInterval(musicInterval); }
+
+        /* --- MENU LOGIC --- */
+        const defaultColors = ['#FF5252', '#448AFF', '#69F0AE', '#FFD740'];
+        function generateMenuRows() {
+            const count = parseInt(document.getElementById('player-count-select').value);
+            const container = document.getElementById('player-configs');
+            container.innerHTML = "";
+            const p0name = loggedInUser ? loggedInUser.username : 'Player 1';
+            for (let i = 0; i < count; i++) {
+                let div = document.createElement('div');
+                div.className = 'menu-row'; div.style.borderLeftColor = defaultColors[i];
+                const isP0 = i === 0;
+                div.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <h3 style="margin: 0; width: 30px;">P${i+1}</h3>
+                        <input type="text" id="p${i}-name"
+                            value="${isP0 ? p0name : 'Bot ' + i}"
+                            class="name-input" maxlength="12"
+                            ${isP0 ? 'readonly tabindex="-1" style="opacity:0.55;cursor:default;user-select:none;"' : 'oninput="checkRankUpStatus()"'}>
+                    </div>
+                    <div class="menu-controls">
+                        <select id="p${i}-type">
+                            <option value="human">Human</option>
+                            <option value="bot" ${i > 0 ? 'selected' : ''}>Bot 🤖</option>
+                        </select>
+                        <input type="color" id="p${i}-color" value="${defaultColors[i]}" onchange="updateRowColor(this, ${i})">
+                    </div>`;
+                container.appendChild(div);
+            }
+            checkRankUpStatus();
+        }
+        function updateRowColor(input, index) { input.parentElement.parentElement.style.borderLeftColor = input.value; }
+
+        /* --- CHAT FUNCTIONS --- */
+        let chatOpen = true;
+        function toggleChat() {
+            const box = document.getElementById('chat-box');
+            chatOpen = !chatOpen;
+            box.style.display = chatOpen ? 'block' : 'none';
+            document.getElementById('chat-toggle-btn').innerText = chatOpen ? '💬 CHAT ▼' : '💬 CHAT ▲';
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            const myName = lobbyPlayerList.find(p => p.socketId === mySocketId)?.name || 'You';
+            const myColor = lobbyPlayerList.find(p => p.socketId === mySocketId)?.color || '#fff';
+            socket.emit('chatMessage', { name: myName, color: myColor, text });
+            input.value = '';
+            input.focus();
+        }
+
+        function showChatPanel() {
+            document.getElementById('chat-panel').style.display = 'flex';
+            addSystemChat('Game started! Say hello 👋');
+        }
+
+        function addSystemChat(msg) {
+            const msgs = document.getElementById('chat-messages');
+            if (!msgs) return;
+            const div = document.createElement('div');
+            div.className = 'chat-system';
+            div.innerText = msg;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        /* --- MULTI-LOBBY FUNCTIONS --- */
+        const LOBBY_SCREENS = ['lobby-browser-screen','lobby-create-screen','lobby-request-screen','lobby-pending-screen','lobby-waiting-screen'];
+
+        function showLobbyScreen(id) {
+            LOBBY_SCREENS.forEach(s => {
+                document.getElementById(s).style.display = s === id ? 'block' : 'none';
+            });
+        }
+
+        function lockLobbyNameInputs() {
+            if (!loggedInUser) return;
+            ['create-name-input', 'request-name-input'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.value = loggedInUser.username;
+                el.readOnly = true;
+                el.style.opacity = '0.55';
+                el.style.cursor = 'default';
+            });
+        }
+
+        function openLobby() {
+            socket.emit('getLobbyList');
+            document.getElementById('lobby-overlay').style.display = 'flex';
+            showLobbyScreen('lobby-browser-screen');
+            document.getElementById('lobby-browser-msg').innerText = '';
+            lockLobbyNameInputs();
+        }
+
+        function closeLobby() {
+            document.getElementById('lobby-overlay').style.display = 'none';
+        }
+
+        function doCreateLobby() {
+            const name = (document.getElementById('create-name-input').value || '').trim() || 'Player';
+            const color = document.getElementById('create-color-input').value;
+            const lobbyName = (document.getElementById('create-room-name-input').value || '').trim();
+            document.getElementById('lobby-create-msg').innerText = '';
+            socket.emit('createLobby', { name, color, lobbyName });
+        }
+
+        function openJoinRequest(roomId, roomName) {
+            pendingJoinRoomId = roomId;
+            document.getElementById('lobby-request-subtitle').innerText = `Joining: "${roomName}"`;
+            document.getElementById('lobby-request-msg').innerText = '';
+            showLobbyScreen('lobby-request-screen');
+            lockLobbyNameInputs();
+        }
+
+        function doRequestJoin() {
+            if (!pendingJoinRoomId) return;
+            const name = (document.getElementById('request-name-input').value || '').trim() || 'Player';
+            const color = document.getElementById('request-color-input').value;
+            document.getElementById('lobby-request-msg').innerText = '';
+            socket.emit('requestJoin', { roomId: pendingJoinRoomId, name, color });
+        }
+
+        function cancelJoinRequest() {
+            pendingJoinRoomId = null;
+            socket.emit('getLobbyList');
+            showLobbyScreen('lobby-browser-screen');
+        }
+
+        function leaveLobby() {
+            myRoomId = null;
+            amIHost = false;
+            lobbyPlayerList = [];
+            socket.emit('getLobbyList');
+            showLobbyScreen('lobby-browser-screen');
+        }
+
+        function respondToJoin(roomId, socketId, approve) {
+            const card = document.getElementById(`req-${socketId}`);
+            if (card) card.parentNode.removeChild(card);
+            socket.emit(approve ? 'approveJoin' : 'denyJoin', { roomId, socketId });
+        }
+
+        function hostStartGame() {
+            const count = parseInt(document.getElementById('player-count-select').value);
+            const humanPlayerMap = {};
+
+            lobbyPlayerList.forEach((lp, lobbyIdx) => {
+                if (lobbyIdx >= count) return;
+                const nameEl  = document.getElementById(`p${lobbyIdx}-name`);
+                const colorEl = document.getElementById(`p${lobbyIdx}-color`);
+                const typeEl  = document.getElementById(`p${lobbyIdx}-type`);
+                if (nameEl)  nameEl.value  = lp.name;
+                if (colorEl) { colorEl.value = lp.color; updateRowColor(colorEl, lobbyIdx); }
+                if (typeEl)  typeEl.value  = 'human';
+                humanPlayerMap[lobbyIdx] = lp.socketId;
+            });
+
+            for (let i = lobbyPlayerList.length; i < count; i++) {
+                const typeEl = document.getElementById(`p${i}-type`);
+                if (typeEl) typeEl.value = 'bot';
+            }
+
+            clientHumanPlayerMap = humanPlayerMap;
+            myPlayerIndex = -1;
+            for (let idx in humanPlayerMap) {
+                if (humanPlayerMap[idx] === mySocketId) { myPlayerIndex = parseInt(idx); break; }
+            }
+            const mode = document.getElementById('game-mode-select').value;
+            socket.emit('startGame', { gameMode: mode, humanPlayerMap });
+            startGame();
+        }
+
+        function initGameAsClient(mode) {
+            gameMode = mode;
+            gameActive = true;
+            isProcessing = false;
+            players = [];
+            sharedBoard = [null, null, null, null, null, null];
+            dumpsterTotal = 0;
+            currentPlayer = 0;
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+            document.getElementById('game-over-controls').style.display = 'none';
+            document.getElementById('roll-btn').style.display = 'inline-block';
+            document.getElementById('roll-btn').disabled = true;
+            document.getElementById('roll-btn').classList.remove('human-turn');
+            logAction('Waiting for game to start...');
+        }
+
+        /* --- MENU LOGIC --- */
+        function applyAbandonPenalty() {
+            if (!loggedInUser) return;
+            const PENALTY = 25;
+            let stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const u = loggedInUser.username;
+            if (!stats[u]) stats[u] = { mmr: 0, wins: 0, losses: 0 };
+            if (typeof stats[u] === 'number') stats[u] = { mmr: stats[u] * 35 };
+            stats[u].mmr = Math.max(0, (stats[u].mmr || 0) - PENALTY);
+            localStorage.setItem('dumpsterStats', JSON.stringify(stats));
+            syncProfile();
+        }
+
+        function goToMainMenu() {
+            if (gameActive && loggedInUser) {
+                if (!confirm('⚠️ Leaving mid-game will deduct -25 ranked MMR as an abandonment penalty.\n\nAre you sure you want to quit?')) return;
+                applyAbandonPenalty();
+            }
+            gameActive = false; isProcessing = false; clearDashBots();
+            isLobbyGame = false; amIHost = false; isWaitingForExternalRoll = false;
+            myPlayerIndex = -1; clientHumanPlayerMap = {}; lastTurnNotified = -1;
+            document.getElementById('game-ui').style.display = 'none';
+            document.getElementById('spinner-overlay').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+            document.getElementById('chat-panel').style.display = 'none';
+            stopMusic(); loadStats(); loadEconomy(); renderChallenges();
+        }
+        function playAgain() { startGame(); }
+
+        /* --- GAME LOGIC --- */
+        let players = []; let currentPlayer = 0; let sharedBoard = [null, null, null, null, null, null]; 
+        let dumpsterTotal = 0; let gameActive = false; let isProcessing = true; let gameMode = 'basic'; let playerCheatChance = 0; 
+        let dashBotIntervals = []; let dashHesitationInterval = null; let lastHumanRollTime = 0;
+
+        function startGame() {
+            gameMode = document.getElementById('game-mode-select').value;
+            if (musicEnabled || sfxEnabled) { initAudio(); if (musicEnabled) startMusic(); }
+            clearDashBots();
+            
+            const count = parseInt(document.getElementById('player-count-select').value);
+            players = [];
+            
+            let highestHumanMmr = 0;
+            let stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+
+            for (let i = 0; i < count; i++) {
+                let isBot = document.getElementById(`p${i}-type`).value === 'bot';
+                let color = document.getElementById(`p${i}-color`).value;
+                let name = document.getElementById(`p${i}-name`).value || `Player ${i+1}`;
+                
+                if (!isBot) {
+                    let pData = stats[name];
+                    let mmr = pData ? (pData.mmr || (typeof pData === 'number' ? pData * 35 : 0)) : 0;
+                    if (mmr > highestHumanMmr) highestHumanMmr = mmr;
+                }
+                document.documentElement.style.setProperty(`--p${i+1}-color`, color);
+                players.push({ id: i, name: name, dice: 20, isBot: isBot, color: color });
+            }
+
+            let highestHumanRankIndex = getRank(highestHumanMmr).index;
+            playerCheatChance = (7 - highestHumanRankIndex) * 0.05; 
+
+            if (godMode) {
+                players.forEach(p => { if (p.isBot) p.dice = 1; else p.dice = 999; });
+                playerCheatChance = 1.0; 
+            }
+
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+            document.getElementById('game-over-controls').style.display = 'none';
+            document.getElementById('roll-btn').style.display = 'inline-block';
+
+            sharedBoard = [null, null, null, null, null, null];
+            dumpsterTotal = 0; gameActive = true; render();
+            
+            if(gameMode === 'dash') {
+                isProcessing = false; logAction("DUMP & DASH! GO GO GO!"); updateControls(); startDashBots();
+            } else runSpinner();
+        }
+
+        function runSpinner() {
+            isProcessing = true;
+            const overlay = document.getElementById('spinner-overlay'); const resultBox = document.getElementById('spinner-result');
+            overlay.style.display = 'flex'; let spins = 0; let maxSpins = 20 + Math.floor(Math.random() * 10); let interval = 50;
+
+            function spinStep() {
+                if(!gameActive) return; 
+                currentPlayer = (currentPlayer + 1) % players.length;
+                let p = players[currentPlayer];
+                resultBox.innerText = p.name;
+                resultBox.style.color = p.color; resultBox.style.borderColor = p.color; resultBox.style.boxShadow = `0 0 40px ${p.color}88`;
+                sfxSpin(); spins++;
+                
+                if (spins < maxSpins) { interval += 5; setTimeout(spinStep, interval); } 
+                else {
+                    setTimeout(() => {
+                        if(!gameActive) return;
+                        overlay.style.display = 'none'; isProcessing = false;
+                        logAction(`Game started! ${players[currentPlayer].name} is up.`);
+                        render(); updateControls(); checkBotTurn();
+                    }, 1500);
+                }
+            }
+            spinStep();
+        }
+
+        function logAction(msg) { document.getElementById('action-log').innerText = msg; }
+
+        function updateControls() {
+            const btn = document.getElementById('roll-btn');
+
+            if (!amIHost && isLobbyGame) {
+                return;
+            }
+
+            if (isWaitingForExternalRoll) { btn.disabled = true; btn.classList.remove('human-turn'); return; }
+
+            if (gameMode === 'dash') {
+                let humanPlayer = players.find(p => !p.isBot);
+                if(humanPlayer && humanPlayer.dice > 0 && gameActive && !isProcessing) { btn.disabled = false; btn.classList.add('human-turn'); } 
+                else { btn.disabled = true; btn.classList.remove('human-turn'); }
+                return;
+            }
+            if (!gameActive || isProcessing || (players[currentPlayer] && players[currentPlayer].isBot)) { btn.disabled = true; btn.classList.remove('human-turn'); } 
+            else { btn.disabled = false; btn.classList.add('human-turn'); }
+
+            if (amIHost && isLobbyGame && gameActive && !isProcessing && currentPlayer !== lastTurnNotified) {
+                lastTurnNotified = currentPlayer;
+                const turnSocketId = clientHumanPlayerMap[currentPlayer];
+                if (turnSocketId && !players[currentPlayer].isBot) {
+                    if (turnSocketId === mySocketId) {
+                        socket.emit('setCurrentTurn', { socketId: mySocketId });
+                    } else {
+                        isWaitingForExternalRoll = true;
+                        btn.disabled = true; btn.classList.remove('human-turn');
+                        socket.emit('setCurrentTurn', { socketId: turnSocketId });
+                    }
+                }
+            }
+        }
+
+        function render(winnerId = null) {
+            const boardEl = document.getElementById('shared-board');
+            boardEl.innerHTML = "";
+            for (let i = 0; i < 6; i++) {
+                let owner = sharedBoard[i]; let div = document.createElement("div");
+                div.className = `slot ${owner !== null ? 'filled owner-' + owner : ''}`; div.innerText = i + 1; 
+                if(owner === null) { div.style.color = "#777"; div.style.borderColor = "#555"; }
+                boardEl.appendChild(div);
+            }
+
+            document.getElementById('dumpster-count').innerText = dumpsterTotal;
+            const container = document.getElementById('game-container'); container.innerHTML = "";
+
+            players.forEach((p, index) => {
+                const pBox = document.createElement("div");
+                let classes = `player-box`;
+                if (gameMode !== 'dash' && index === currentPlayer && p.dice > 0 && gameActive) classes += " active-turn";
+                else if (gameMode === 'dash' && p.dice > 0 && gameActive) classes += " active-turn"; 
+                if (p.dice <= 0) classes += " out-of-game";
+                if (winnerId !== null && index === winnerId) classes += " winner-flash"; 
+                
+                pBox.className = classes;
+                let charmTag = '';
+                if (!p.isBot && equippedCharm) {
+                    let rarityInfo = getCharmRarityInfo(equippedCharm);
+                    charmTag = `<div class="equipped-display-container" data-rarity="${rarityInfo.text}"><span class="equipped-display">${equippedCharm}</span></div>`;
+                }
+
+                const isMe = isLobbyGame && clientHumanPlayerMap[index] === mySocketId;
+                const youTag = isMe ? ' <span style="font-size:11px;background:#448AFF;color:#fff;padding:2px 6px;border-radius:4px;font-weight:900;">YOU</span>' : '';
+                pBox.innerHTML = `${charmTag}${p.isBot ? '<div class="bot-label">BOT 🤖</div>' : ''}
+                    <h3 style="margin: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${p.name}${youTag}</h3>
+                    <div class="dice-count" style="color: var(--p${index+1}-color)">${p.dice} 🎲</div>`;
+                container.appendChild(pBox);
+            });
+
+            if (amIHost && isLobbyGame && gameActive) {
+                clearTimeout(stateSyncTimer);
+                stateSyncTimer = setTimeout(() => {
+                    socket.emit('stateSync', {
+                        players: players.map(p => ({ ...p })),
+                        sharedBoard: [...sharedBoard],
+                        dumpsterTotal, currentPlayer, gameActive, gameMode,
+                        actionLog: document.getElementById('action-log').innerText
+                    });
+                }, 150);
+            }
+        }
+
+        function spawnRollAnimation(roll, playerIndex) {
+            sfxRoll(); let pColor = players[playerIndex].color;
+            let el = document.createElement('div'); el.className = 'roll-float show-roll'; el.innerText = roll;
+            el.style.textShadow = `0 0 20px #000, 0 0 50px ${pColor}`;
+            if(gameMode === 'dash') { el.style.left = (40 + Math.random() * 20) + "%"; el.style.top = (40 + Math.random() * 20) + "%"; }
+            document.getElementById('hub').appendChild(el); setTimeout(() => el.remove(), 600);
+        }
+
+        function clearDashBots() { dashBotIntervals.forEach(clearInterval); dashBotIntervals = []; if(dashHesitationInterval) clearInterval(dashHesitationInterval); }
+
+        function startDashBots() {
+            players.forEach(p => {
+                if(p.isBot) {
+                    let interval = setInterval(() => { if(gameActive && p.dice > 0 && !isProcessing) processRollAction(p.id); }, 1000 + Math.random() * 800); 
+                    dashBotIntervals.push(interval);
+                }
+            });
+
+            lastHumanRollTime = Date.now();
+            dashHesitationInterval = setInterval(() => {
+                if(gameActive && !isProcessing) {
+                    let humanIdx = players.findIndex(p => !p.isBot);
+                    if(humanIdx !== -1 && players[humanIdx].dice > 0) {
+                        if(Date.now() - lastHumanRollTime > 3000) {
+                            let lostDice = Math.min(5, players[humanIdx].dice);
+                            players[humanIdx].dice -= lostDice; dumpsterTotal += lostDice; sfxTrash();
+                            logAction(`⏰ TOO SLOW! ${players[humanIdx].name} lost ${lostDice} dice!`);
+                            const dBox = document.getElementById('dumpster-box'); dBox.classList.remove('dumpster-eat'); void dBox.offsetWidth; dBox.classList.add('dumpster-eat');
+                            render(); lastHumanRollTime = Date.now(); checkGameOver();
+                        }
+                    }
+                }
+            }, 500);
+        }
+
+        function checkBotTurn() {
+            if (!gameActive || isProcessing || gameMode === 'dash') return;
+            if (players[currentPlayer].isBot) {
+                isProcessing = true; updateControls();
+                setTimeout(() => {
+                    if (gameActive) processRollAction(currentPlayer, () => { isProcessing = false; render(); updateControls(); checkBotTurn(); });
+                    else isProcessing = false;
+                }, 1000);
+            }
+        }
+
+        function executeRoll() {
+            if (!gameActive) return;
+
+            if (!amIHost && isLobbyGame) {
+                const btn = document.getElementById('roll-btn');
+                btn.disabled = true; btn.classList.remove('human-turn');
+                socket.emit('requestRoll');
+                return;
+            }
+
+            if (isProcessing || isWaitingForExternalRoll) return;
+
+            if (gameMode === 'dash') {
+                lastHumanRollTime = Date.now();
+                let humanIdx = players.findIndex(p => !p.isBot);
+                if (humanIdx !== -1) {
+                    if (isLobbyGame) {
+                        pendingHumanRollCallback = (roll) => { processRollAction(humanIdx, null, roll); };
+                        socket.emit('requestRoll');
+                    } else {
+                        processRollAction(humanIdx, null, Math.floor(Math.random() * 6) + 1);
+                    }
+                }
+            } else {
+                if (players[currentPlayer].isBot) return;
+                isProcessing = true; updateControls();
+                const onRoll = (roll) => {
+                    processRollAction(currentPlayer, () => { isProcessing = false; render(); updateControls(); checkBotTurn(); }, roll);
+                };
+                if (isLobbyGame) {
+                    pendingHumanRollCallback = onRoll;
+                    socket.emit('requestRoll');
+                } else {
+                    onRoll(Math.floor(Math.random() * 6) + 1);
+                }
+            }
+        }
+
+        function processRollAction(actingPlayerId, callback = null, preRoll = null) {
+            let p = players[actingPlayerId];
+            if(p.dice <= 0) { if(callback) callback(); return; }
+
+            let roll; let emptySlots = [];
+            for(let i=0; i<6; i++) { if (sharedBoard[i] === null) emptySlots.push(i+1); }
+
+            if (preRoll !== null) roll = preRoll;
+            else if (!p.isBot && emptySlots.length === 1 && Math.random() < playerCheatChance) roll = emptySlots[0];
+            else roll = Math.floor(Math.random() * 6) + 1;
+
+            p.dice--;
+            if (!p.isBot) progressChallenge('roll_25', 1);
+
+            render(); spawnRollAnimation(roll, actingPlayerId);
+
+            setTimeout(() => {
+                if(!gameActive) return;
+                let currentOwner = sharedBoard[roll - 1]; let isGarbage = false; let boardFilled = false; let battleLog = false; let warTrapVictim = null;
+
+                if (gameMode === 'basic' || gameMode === 'dash') {
+                    if(currentOwner === null) sharedBoard[roll - 1] = actingPlayerId;
+                    else isGarbage = true;
+                } else if (gameMode === 'tidy') {
+                    if (currentOwner === null) {
+                        let valid = true; for(let i=0; i<roll-1; i++) { if(sharedBoard[i] === null) valid = false; }
+                        if(valid) sharedBoard[roll - 1] = actingPlayerId; else isGarbage = true; 
+                    } else isGarbage = true;
+                } else if (gameMode === 'battle') {
+                    if (currentOwner === null) sharedBoard[roll - 1] = actingPlayerId;
+                    else if (currentOwner !== actingPlayerId) {
+                        if (Math.random() > 0.5) { sharedBoard[roll - 1] = actingPlayerId; battleLog = true; dumpsterTotal++; } else isGarbage = true; 
+                    } else isGarbage = true; 
+                } else if (gameMode === 'war') {
+                    if (currentOwner === null) {
+                        sharedBoard[roll - 1] = actingPlayerId; let nextPlayer = (actingPlayerId + 1) % players.length;
+                        while(players[nextPlayer].dice <= 0 && nextPlayer !== actingPlayerId) nextPlayer = (nextPlayer + 1) % players.length;
+                        if(nextPlayer !== actingPlayerId && players[nextPlayer].dice > 0) { players[nextPlayer].dice--; dumpsterTotal++; warTrapVictim = nextPlayer; }
+                    } else isGarbage = true;
+                }
+
+                if (!isGarbage) {
+                    sfxClaim();
+                    if (gameMode === 'battle' && battleLog) logAction(`⚔️ BATTLE! ${p.name} knocked out Player ${currentOwner + 1} from slot ${roll}!`);
+                    else if (gameMode === 'war' && warTrapVictim !== null) logAction(`🪤 ${p.name} claimed ${roll}! ${players[warTrapVictim].name} caught in a trap (-1 🎲)!`);
+                    else logAction(`${p.name} claimed slot ${roll}!`);
+                    
+                    if (checkBoardFull()) boardFilled = true; else if(gameMode !== 'dash') passTurn();
+                } else {
+                    dumpsterTotal++; sfxTrash();
+                    if(gameMode === 'tidy') logAction(`${p.name} rolled ${roll} out of order! Garbage!`);
+                    else if(gameMode === 'battle') logAction(`⚔️ ${p.name} lost the battle for slot ${roll}!`);
+                    else logAction(`Slot ${roll} taken! Garbage!`);
+                    
+                    const dBox = document.getElementById('dumpster-box'); dBox.classList.remove('dumpster-eat'); void dBox.offsetWidth; dBox.classList.add('dumpster-eat');
+                    if(gameMode !== 'dash') passTurn();
+                }
+
+                render();
+                if (boardFilled) setTimeout(() => evaluateBoard(actingPlayerId, callback), 400);
+                else { checkGameOver(); if(callback && gameActive) callback(); }
+            }, (gameMode === 'dash') ? 200 : 500); 
+        }
+
+        function checkBoardFull() { return !sharedBoard.includes(null); }
+
+        function passTurn() { let attempts = 0; do { currentPlayer = (currentPlayer + 1) % players.length; attempts++; } while (players[currentPlayer].dice <= 0 && attempts < players.length); }
+
+        let activeWinStreak = 0; let isDoubleOrNothing = false; let pendingDonRewards = { money: 0, mmr: 0 };
+
+        function checkGameOver() {
+            let activePlayers = players.filter(p => p.dice > 0);
+            if (activePlayers.length === 1 || activePlayers.length === 0) {
+                clearDashBots();
+                let overallWinner = activePlayers.length === 1 ? activePlayers[0] : players[0]; 
+                gameActive = false; sfxGameOver();
+                logAction(`🏆 GAME OVER! ${overallWinner.name} wins!`);
+                render(overallWinner.id); updateControls(); stopMusic();
+                
+                let isHumanWinner = !overallWinner.isBot;
+                
+                if (isHumanWinner) {
+                    activeWinStreak++; progressChallenge('win_3', 1); progressChallenge('streak_3', activeWinStreak, true);
+                    if(isDoubleOrNothing) progressChallenge('win_don', 1);
+                } else activeWinStreak = 0;
+
+                let streakMultiplier = 1 + (activeWinStreak * 0.1); 
+                let baseMoney = 5;
+                let earnedMoney = Math.floor(baseMoney * streakMultiplier);
+
+                /* --- SCALED RANKED SYSTEM (PLAYER COUNT BALANCING) --- */
+                let totalMatchPlayers = players.length;
+                let baseMmr = 15 + (totalMatchPlayers * 10); 
+                let lossMmr = 10 + (totalMatchPlayers * 5);  
+                
+                let earnedMmr = Math.floor(baseMmr * streakMultiplier);
+
+                let donLossPenalty = 0;
+                if (isDoubleOrNothing) {
+                    if (isHumanWinner) { 
+                        earnedMmr = pendingDonRewards.mmr * 2; 
+                        earnedMoney = pendingDonRewards.money * 2; 
+                        logAction(`🔥 DOUBLE OR NOTHING WON! Huge payout! 🔥`); 
+                    } 
+                    else { 
+                        donLossPenalty = pendingDonRewards.mmr;
+                        earnedMmr = 0; 
+                        earnedMoney = 0; 
+                        logAction(`💀 DOUBLE OR NOTHING LOST! -${donLossPenalty} MMR! 💀`); 
+                    }
+                    isDoubleOrNothing = false; 
+                }
+
+                players.forEach(p => {
+                    if (!p.isBot) {
+                        let stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+                        if (!stats[p.name]) stats[p.name] = { mmr: 0 };
+                        if (typeof stats[p.name] === 'number') stats[p.name] = { mmr: stats[p.name] * 35 };
+
+                        if (p.id === overallWinner.id) {
+                            let oldRank = getRank(stats[p.name].mmr).name;
+                            stats[p.name].mmr += earnedMmr;
+                            let newRank = getRank(stats[p.name].mmr).name;
+                            
+                            if (oldRank !== newRank && stats[p.name].mmr > 0) {
+                                playerMoney += 25;
+                                setTimeout(() => alert(`🎉 RANK UP! Promised Reward: +$25 for hitting ${newRank}!`), 500);
+                            }
+                        } else { 
+                            const penalty = donLossPenalty > 0 ? donLossPenalty : lossMmr;
+                            stats[p.name].mmr = Math.max(0, stats[p.name].mmr - penalty); 
+                        }
+                        localStorage.setItem('dumpsterStats', JSON.stringify(stats));
+                    }
+                });
+
+                if (isHumanWinner && earnedMoney > 0) { playerMoney += earnedMoney; progressChallenge('earn_500', earnedMoney); saveEconomy(); }
+                loadStats(); syncProfile();
+
+                document.getElementById('roll-btn').style.display = 'none';
+                document.getElementById('game-over-controls').style.display = 'block';
+                
+                const donBtn = document.getElementById('don-btn'); const streakDisp = document.getElementById('streak-display');
+                if (isHumanWinner) {
+                    streakDisp.style.display = 'block'; document.getElementById('streak-count').innerText = activeWinStreak; document.getElementById('streak-mult').innerText = streakMultiplier.toFixed(1);
+                    donBtn.style.display = 'inline-block'; pendingDonRewards = { money: earnedMoney, mmr: earnedMmr };
+                } else { streakDisp.style.display = 'none'; donBtn.style.display = 'none'; }
+
+                return true;
+            }
+            return false;
+        }
+
+        function startDoubleOrNothing() { isDoubleOrNothing = true; startGame(); }
+
+        function evaluateBoard(winnerIndex, callback = null) {
+            isProcessing = true; updateControls(); clearDashBots(); 
+            players[winnerIndex].dice += 6; sfxPotWin();
+            logAction(`FULL BOARD! ${players[winnerIndex].name} takes the pot (+6)!`);
+            render(winnerIndex);
+
+            if (checkGameOver()) return;
+
+            setTimeout(() => {
+                if (gameActive) {
+                    sharedBoard = [null, null, null, null, null, null];
+                    if(gameMode !== 'dash') passTurn();
+                    logAction("Board cleared. Let's go!");
+                    if (gameMode === 'dash') { isProcessing = false; render(); updateControls(); startDashBots(); }
+                    if (callback) callback();
+                }
+            }, 3000);
+        }
+
+        generateMenuRows(); updateRulesDisplay(); loadStats(); loadEconomy(); initChallenges();
     </script>
 </body>
 </html>
