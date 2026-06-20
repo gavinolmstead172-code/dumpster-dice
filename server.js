@@ -25,22 +25,45 @@ app.post('/api/abandon-penalty', async (req, res) => {
   }
 });
 
-/* --- RENDER DATABASE FIX --- */
+/* --- RENDER DATABASE FIX & AUTO-BUILD --- */
 const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/dumpster_dice',
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
 // Test the connection when the server boots up
-pool.connect((err, client, release) => {
+pool.connect(async (err, client, release) => {
   if (err) {
     console.error('Database connection failed. Is the DATABASE_URL correct?', err.stack);
   } else {
     console.log('✅ Successfully connected to the PostgreSQL database!');
-    release();
+    
+    // Auto-build the table if it doesn't exist yet
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          money INTEGER DEFAULT 0,
+          mmr INTEGER DEFAULT 0,
+          wins INTEGER DEFAULT 0,
+          losses INTEGER DEFAULT 0,
+          inventory JSONB DEFAULT '[]',
+          equipped_charm VARCHAR(100) DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      console.log('✅ Database tables are built and ready!');
+    } catch (dbErr) {
+      console.error('❌ Failed to build database tables:', dbErr);
+    } finally {
+      release(); // Always release the client back to the pool
+    }
   }
 });
-/* --------------------------- */
+/* ---------------------------------------- */
 
 const MAX_ROOMS = 5;
 const MAX_PLAYERS = 4;
