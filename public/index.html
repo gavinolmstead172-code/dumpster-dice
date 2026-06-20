@@ -2,213 +2,613 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dumpster Dice Multiplayer</title>
+    <title>Dumpster Dice - Deluxe Arcade Edition</title>
     
     <script src="/socket.io/socket.io.js"></script>
-    
+
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #121212;
-            color: #ffffff;
-            text-align: center;
+        :root {
+            --p1-color: #FF5252;
+            --p2-color: #448AFF;
+            --p3-color: #69F0AE;
+            --p4-color: #FFD740;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background-color: #1a1a1a; 
+            color: #fff;
+            padding: 20px; 
+            overflow-x: hidden;
             margin: 0;
-            padding: 20px;
         }
-        .screen {
-            display: none;
-            max-width: 450px;
-            margin: 60px auto;
-            padding: 30px;
-            background: #1e1e1e;
-            border-radius: 14px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.7);
-            border: 1px solid #2d2d2d;
-        }
-        .active {
-            display: block; /* This makes the current screen visible */
-        }
-        h1 {
-            color: #4CAF50;
+
+        h1 { 
+            color: #fff; 
+            font-size: 4.5em; 
+            margin-top: 10px;
             margin-bottom: 20px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-shadow: 
+                0 0 10px #8BC34A, 
+                0 0 20px #8BC34A, 
+                0 0 40px #8BC34A, 
+                4px 4px 0 #111, 
+                8px 8px 0 #33691E;
+            animation: pulseGlow 2s infinite alternate, float 4s ease-in-out infinite; 
         }
-        input, button {
-            width: 100%;
-            padding: 14px;
-            margin: 10px 0;
-            border-radius: 8px;
-            border: none;
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
+        }
+
+        @keyframes pulseGlow {
+            0% { filter: brightness(1); }
+            100% { filter: brightness(1.25); text-shadow: 0 0 15px #8BC34A, 0 0 30px #8BC34A, 0 0 50px #8BC34A, 4px 4px 0 #111, 8px 8px 0 #33691E; }
+        }
+
+        #main-menu {
+            display: none;
+            justify-content: center;
+            gap: 25px;
+            flex-wrap: wrap;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .menu-panel {
+            background: linear-gradient(145deg, #333, #222);
+            border: 4px solid #555;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.8);
+            flex: 1;
+            min-width: 320px;
+            max-width: 450px;
+            position: relative;
+        }
+
+        .menu-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #111;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            border-left: 8px solid;
+        }
+        
+        .name-input {
+            width: 120px;
+            padding: 8px;
             font-size: 16px;
-            box-sizing: border-box;
-        }
-        input {
-            background: #2d2d2d;
-            color: #ffffff;
-            border: 1px solid #444;
-        }
-        button {
-            background: #4CAF50;
-            color: white;
             font-weight: bold;
+            background: #222;
+            color: #fff;
+            border: 2px solid #555;
+            border-radius: 5px;
+            text-align: left;
+            transition: 0.2s;
+        }
+
+        .name-input:focus { border-color: #8BC34A; outline: none; }
+        
+        .menu-controls { display: flex; align-items: center; }
+
+        .menu-controls select, .menu-controls input[type="color"] {
+            margin-left: 10px;
+            padding: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            background: #333;
+            color: white;
+            border: 2px solid #555;
+            border-radius: 5px;
             cursor: pointer;
-            transition: transform 0.1s, background 0.2s;
         }
-        button:hover {
-            background: #45a049;
-            transform: translateY(-1px);
+
+        .menu-controls input[type="color"] { height: 35px; width: 50px; padding: 0; }
+
+        #player-count-select { font-size: 20px; padding: 10px; background: #222; color: #fff; border: 2px solid #555; border-radius: 5px; }
+
+        .btn-large {
+            padding: 15px 40px; 
+            font-size: 24px; 
+            font-weight: 900;
+            cursor: pointer; 
+            background: linear-gradient(180deg, #8BC34A, #689F38);
+            border: 2px solid #33691E;
+            border-radius: 12px;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+            box-shadow: 0 6px 0 #33691E, 0 10px 20px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+            margin-top: 20px;
+            margin-left: 10px;
+            margin-right: 10px;
+            width: 100%;
         }
-        button:active {
-            transform: translateY(1px);
+        .btn-large:active { transform: translateY(6px); box-shadow: 0 0 0 transparent; }
+
+        .btn-menu {
+            background: linear-gradient(180deg, #FF9800, #E65100);
+            border: 2px solid #BF360C;
+            box-shadow: 0 6px 0 #BF360C, 0 10px 20px rgba(0,0,0,0.5);
+            width: auto;
         }
-        .menu-btn {
-            background: #2a2a2a;
-            color: #ffffff;
-            border: 1px solid #3a3a3a;
+
+        .audio-btn-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 4px; }
+        .audio-btn-row .audio-toggle { flex: 1; margin: 0; font-size: 14px; padding: 10px 8px; }
+        .audio-toggle {
+            background: #444; border: 2px solid #666; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 15px;
+        }
+        .audio-toggle.on { background: #FF9800; border-color: #E65100; }
+
+        #rules-text {
+            background: #111;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #444;
+            font-size: 18px;
+            line-height: 1.5;
             text-align: left;
-            padding-left: 20px;
+            color: #ddd;
+            min-height: 150px;
         }
-        .menu-btn:hover {
-            background: #333333;
-            border-color: #4CAF50;
+        
+        .rules-title { color: #8BC34A; font-size: 22px; margin-bottom: 10px; text-transform: uppercase; font-weight: 900; }
+
+        #rank-up-warning {
+            background: linear-gradient(90deg, #FF1744, #D50000);
+            color: white; font-weight: 900; padding: 10px; border-radius: 10px; margin-top: 10px; font-size: 18px;
+            display: none; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 15px rgba(213, 0, 0, 0.4); animation: pulseBtn 1s infinite;
         }
-        .dice-container {
-            font-size: 64px;
-            margin: 30px 0;
-            min-height: 80px;
-            transition: transform 0.2s;
+
+        .leaderboard-list { list-style: none; padding: 0; margin: 0; text-align: left; }
+        .leaderboard-item {
+            background: #111; padding: 12px 20px; margin-bottom: 8px; border-radius: 8px; display: flex;
+            justify-content: space-between; align-items: center; font-size: 18px; font-weight: bold; border: 2px solid #444;
         }
-        #log {
-            background: #0b0b0b;
-            padding: 12px;
-            border-radius: 8px;
-            text-align: left;
-            height: 120px;
-            overflow-y: auto;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 13px;
-            color: #00ff66;
-            border: 1px solid #222;
+        .rank-badge { padding: 4px 8px; border-radius: 4px; font-size: 14px; color: #000; margin-right: 10px; text-transform: uppercase; }
+
+        .shop-header {
+            display: flex; justify-content: space-between; align-items: center; background: #111;
+            padding: 10px 20px; border-radius: 10px; border: 2px solid #FFD700; margin-bottom: 20px;
         }
+        .wallet { font-size: 24px; font-weight: bold; color: #FFD700; }
+        
+        .shop-cases { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
+        
+        .case-btn {
+            flex: 1; padding: 15px 5px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer;
+            border: 2px solid #555; transition: 0.2s; color: white; text-shadow: 1px 1px 2px #000; position: relative;
+        }
+        
+        .case-btn:hover { filter: brightness(1.2); }
+        .case-btn:active { transform: scale(0.95); }
+        .case-common { background: linear-gradient(145deg, #78909C, #546E7A); border-color: #CFD8DC; }
+        .case-rare { background: linear-gradient(145deg, #5C6BC0, #3949AB); border-color: #8C9EFF; }
+        .case-epic { background: linear-gradient(145deg, #AB47BC, #8E24AA); border-color: #EA80FC; }
+
+        .case-tooltip {
+            visibility: hidden; position: absolute; bottom: 115%; left: 50%; transform: translateX(-50%);
+            background: rgba(17, 17, 17, 0.95); color: #fff; padding: 12px; border-radius: 8px; border: 2px solid #555;
+            width: max-content; font-size: 14px; text-align: left; opacity: 0; transition: opacity 0.2s; z-index: 100;
+            pointer-events: none; box-shadow: 0 8px 20px rgba(0,0,0,0.8); line-height: 1.5; text-shadow: none;
+        }
+        .case-btn:hover .case-tooltip { visibility: visible; opacity: 1; }
+        .tooltip-title { font-weight: bold; margin-bottom: 5px; color: #FFD700; border-bottom: 1px solid #444; padding-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; text-align: center;}
+        .tooltip-pool { font-size: 14px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .tooltip-chase { font-weight: 900; color: #FF1744; font-size: 14px; background: #222; padding: 4px; border-radius: 4px; border: 1px solid #FF1744; text-align: center;}
+
+        .inventory-grid {
+            display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; background: #111; padding: 15px; border-radius: 10px; border: 2px solid #444; min-height: 80px;
+        }
+
+        .charm-item {
+            font-size: 30px; background: #333; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;
+            border-radius: 8px; border: 2px solid #555; cursor: pointer; transition: 0.2s; position: relative;
+        }
+        .charm-item:hover { transform: scale(1.1); background: #444; }
+        .charm-common { border-color: #78909C !important; }
+        .charm-rare { border-color: #3949AB !important; }
+        .charm-epic { border-color: #8E24AA !important; }
+        .charm-chase { border-color: #FF1744 !important; box-shadow: 0 0 10px #FF1744; animation: chasePulse 1.5s infinite alternate; }
+
+        @keyframes chasePulse {
+            0% { box-shadow: 0 0 5px #FF1744; }
+            100% { box-shadow: 0 0 20px #FF1744, inset 0 0 10px #FF1744; }
+        }
+        
+        .charm-item.equipped { background: #33691E; box-shadow: 0 0 10px #8BC34A; border-color: #8BC34A !important; animation: none;}
+        
+        .charm-item::after, .equipped-display-container::after {
+            content: attr(data-rarity); position: absolute; bottom: 55px; left: 50%; transform: translateX(-50%);
+            background: #000; color: #fff; font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 4px;
+            white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 99; border: 1px solid #555;
+        }
+        .charm-item:hover::after, .equipped-display-container:hover::after { opacity: 1; }
+
+        .equipped-display-container { position: absolute; top: -15px; left: -15px; z-index: 5; cursor: help; }
+        .equipped-display { font-size: 35px; filter: drop-shadow(0 0 5px rgba(0,0,0,0.8)); animation: float 3s infinite ease-in-out;}
+
+        #case-opening-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.95);
+            z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        .case-window-container {
+            position: relative; width: 800px; max-width: 90vw; height: 160px; background: #111;
+            border: 4px solid #555; border-radius: 10px; overflow: hidden; box-shadow: 0 0 50px rgba(0,0,0,0.8), inset 0 0 20px #000;
+        }
+
+        .case-target-line { position: absolute; top: 0; bottom: 0; left: 50%; width: 4px; background: #FFD700; transform: translateX(-50%); z-index: 10; box-shadow: 0 0 15px #FFD700; }
+
+        #case-slider-strip { display: flex; align-items: center; height: 100%; width: max-content; transform: translateX(0); }
+
+        .slider-charm-box {
+            width: 100px; height: 100px; margin: 0 10px; display: flex; align-items: center; justify-content: center;
+            font-size: 50px; background: #222; border: 3px solid #444; border-radius: 12px; box-sizing: border-box; flex-shrink: 0; opacity: 0.8; transition: opacity 0.3s;
+        }
+        
+        .slider-charm-box.winning-item { opacity: 1; transform: scale(1.1); z-index: 5; box-shadow: 0 0 30px #FFD700; }
+
+        #case-opening-result { margin-top: 30px; font-size: 28px; font-weight: bold; color: #fff; min-height: 40px; text-shadow: 0 2px 10px #000; }
+
+        #close-case-btn { margin-top: 20px; padding: 10px 30px; font-size: 20px; font-weight: bold; cursor: pointer; background: linear-gradient(180deg, #8BC34A, #689F38); border: 2px solid #33691E; border-radius: 8px; color: #fff; display: none; }
+
+        #game-ui { display: none; }
+
+        .in-game-header { display: flex; justify-content: space-between; max-width: 600px; margin: 0 auto 15px auto; }
+        .header-btn { background: #444; border: 2px solid #666; color: white; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .header-btn:hover { background: #555; }
+        .header-btn.on { background: #FF9800; border-color: #E65100; }
+
+        .central-hub { background: linear-gradient(145deg, #4a4a4a, #333); padding: 20px; border-radius: 15px; border: 4px solid #555; margin: 10px auto; max-width: 550px; box-shadow: 0 10px 20px rgba(0,0,0,0.6); position: relative; }
+
+        .board { display: flex; justify-content: center; gap: 12px; margin: 15px 0; }
+
+        .slot { 
+            width: 55px; height: 55px; border: 3px solid #777; border-radius: 10px; background: #222; 
+            display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; 
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        .slot.filled { 
+            transform: scale(1.15); border-color: #fff; color: #000; box-shadow: 0 0 15px rgba(255,255,255,0.5);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.3); } 100% { transform: scale(1.15); } }
+
+        .owner-0 { background-color: var(--p1-color) !important; } .owner-1 { background-color: var(--p2-color) !important; }
+        .owner-2 { background-color: var(--p3-color) !important; } .owner-3 { background-color: var(--p4-color) !important; }
+
+        .dumpster { border: 4px dashed #FF9800; padding: 15px; background: #3e2723; margin: 20px auto; width: 220px; font-size: 22px; border-radius: 10px; color: #FFb74D; transition: 0.1s; }
+        .dumpster-eat { animation: shakeDumpster 0.4s; background: #4e342e; border-color: #FF5722; color: #fff;}
+
+        @keyframes shakeDumpster {
+            0% { transform: translate(1px, 1px) scale(1.05) rotate(0deg); } 20% { transform: translate(-3px, 0px) scale(1.05) rotate(2deg); }
+            40% { transform: translate(1px, -1px) scale(1.05) rotate(-2deg); } 60% { transform: translate(-3px, 1px) scale(1.05) rotate(0deg); }
+            80% { transform: translate(1px, -1px) scale(1.05) rotate(2deg); } 100% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+        }
+
+        .game-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 30px;}
+        
+        .player-box { background: #2c2c2c; padding: 15px; border-radius: 12px; border: 4px solid transparent; width: 160px; transition: all 0.3s ease; position: relative; }
+        .bot-label { font-size: 12px; color: #aaa; background: #111; padding: 2px 6px; border-radius: 4px; position: absolute; top: -10px; right: 10px; border: 1px solid #444;}
+
+        .active-turn { transform: translateY(-15px); }
+        .active-turn:nth-child(1) { border-color: var(--p1-color); box-shadow: 0 10px 20px var(--p1-color); }
+        .active-turn:nth-child(2) { border-color: var(--p2-color); box-shadow: 0 10px 20px var(--p2-color); }
+        .active-turn:nth-child(3) { border-color: var(--p3-color); box-shadow: 0 10px 20px var(--p3-color); }
+        .active-turn:nth-child(4) { border-color: var(--p4-color); box-shadow: 0 10px 20px var(--p4-color); }
+
+        .winner-flash { animation: flashWin 1s ease 3; }
+        @keyframes flashWin { 0%, 100% { transform: scale(1); background-color: #2c2c2c; } 50% { transform: scale(1.15); background-color: #fff; color: #000; box-shadow: 0 0 30px #fff;} }
+
+        .dice-count { font-size: 32px; font-weight: bold; margin-top: 10px; transition: 0.3s; text-shadow: 2px 2px #000; }
+        .out-of-game { opacity: 0.4; filter: grayscale(100%); transform: scale(0.95); }
+
+        button.human-turn { animation: pulseBtn 1.5s infinite; }
+        @keyframes pulseBtn {
+            0% { transform: scale(1); box-shadow: 0 6px 0 #33691E, 0 0 0 rgba(139, 195, 74, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 6px 0 #33691E, 0 0 20px rgba(139, 195, 74, 0.8); }
+            100% { transform: scale(1); box-shadow: 0 6px 0 #33691E, 0 0 0 rgba(139, 195, 74, 0.4); }
+        }
+
+        button:disabled { background: #444; color: #777; border-color: #222; box-shadow: none; cursor: not-allowed; animation: none; transform: translateY(6px);}
+
+        #action-log { margin-top: 15px; font-size: 18px; height: 30px; font-weight: bold; color: #ddd; }
+
+        .roll-float {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0); font-size: 80px;
+            font-weight: 900; color: #fff; text-shadow: 0 0 20px #000; pointer-events: none; opacity: 0; z-index: 10;
+        }
+
+        .show-roll { animation: floatUpAndFade 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes floatUpAndFade {
+            0% { transform: translate(-50%, -10%) scale(0.5); opacity: 0; } 20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            80% { transform: translate(-50%, -60%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -80%) scale(1.5); opacity: 0; }
+        }
+
+        #spinner-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9);
+            z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .spinner-box {
+            font-size: 50px; font-weight: 900; background: #222; padding: 40px 80px; border-radius: 20px;
+            border: 6px solid #8BC34A; box-shadow: 0 0 40px rgba(139, 195, 74, 0.8); text-transform: uppercase;
+        }
+        .spinner-text { margin-top: 20px; font-size: 24px; color: #aaa; letter-spacing: 2px; animation: pulseBtn 1s infinite; }
+
+        /* --- LOBBY STYLES --- */
+        #lobby-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.97); z-index: 3000;
+            display: none; align-items: center; justify-content: center;
+        }
+
+        /* --- CHAT STYLES --- */
+        #chat-panel {
+            position: fixed; bottom: 20px; right: 20px; width: 300px; z-index: 200;
+            display: none; flex-direction: column; gap: 0;
+        }
+        #chat-toggle-btn {
+            align-self: flex-end; background: linear-gradient(180deg, #448AFF, #1565C0);
+            border: 2px solid #0D47A1; color: #fff; font-weight: 900; font-size: 15px;
+            padding: 8px 16px; border-radius: 10px 10px 0 0; cursor: pointer; letter-spacing: 1px;
+        }
+        #chat-box {
+            background: rgba(10,10,10,0.95); border: 2px solid #333;
+            border-radius: 0 10px 10px 10px; overflow: hidden;
+        }
+        #chat-messages {
+            height: 180px; overflow-y: auto; padding: 10px; display: flex;
+            flex-direction: column; gap: 5px;
+        }
+        #chat-messages::-webkit-scrollbar { width: 4px; }
+        #chat-messages::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+        .chat-msg { font-size: 14px; line-height: 1.4; word-break: break-word; }
+        .chat-msg .chat-name { font-weight: 900; }
+        .chat-msg .chat-text { color: #ddd; }
+        .chat-system { font-size: 13px; color: #888; font-style: italic; }
+        #chat-input-row { display: flex; border-top: 1px solid #333; }
+        #chat-input {
+            flex: 1; background: #111; color: #fff; border: none; padding: 8px 10px;
+            font-size: 14px; outline: none;
+        }
+        #chat-send-btn {
+            background: #448AFF; border: none; color: #fff; font-weight: bold;
+            padding: 8px 12px; cursor: pointer; font-size: 13px;
+        }
+        #chat-send-btn:hover { background: #1565C0; }
+
+        /* --- LOGIN SCREEN --- */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #080808; z-index: 10000; display: flex;
+            align-items: center; justify-content: center; flex-direction: column;
+        }
+        #login-box {
+            background: linear-gradient(145deg, #1a1a1a, #111);
+            border: 4px solid #8BC34A; border-radius: 20px; padding: 40px 44px;
+            max-width: 400px; width: 90%; text-align: center;
+            box-shadow: 0 0 60px rgba(139,195,74,0.3), 0 20px 40px rgba(0,0,0,0.9);
+        }
+        #login-box h1 { color: #8BC34A; font-size: 28px; margin: 0 0 6px 0; letter-spacing: 2px; text-shadow: 0 0 20px rgba(139,195,74,0.6); }
+        #login-box p  { color: #888; font-size: 14px; margin: 0 0 24px 0; }
+        .auth-input {
+            width: 100%; padding: 13px 14px; font-size: 17px; font-weight: bold;
+            background: #111; color: #fff; border: 2px solid #444; border-radius: 10px;
+            margin-bottom: 12px; box-sizing: border-box; text-align: left; letter-spacing: 0.5px;
+        }
+        .auth-input:focus { border-color: #8BC34A; outline: none; }
+        #auth-msg { color: #FF5252; font-size: 14px; min-height: 20px; margin-bottom: 10px; font-weight: bold; }
+        #auth-msg.success { color: #8BC34A; }
+        .auth-btn-row { display: flex; gap: 10px; margin-top: 4px; }
+        .auth-btn-row .btn-large { flex: 1; margin: 0; font-size: 15px; padding: 14px 10px; }
+        #auth-register-btn { background: linear-gradient(180deg, #555, #333); border-color: #444; box-shadow: 0 4px 0 #222, 0 6px 12px rgba(0,0,0,0.4); }
+        #auth-register-btn:hover { background: linear-gradient(180deg, #666, #444); }
+
+        /* --- ADMIN PANEL --- */
+        #admin-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.95); z-index: 8000;
+            display: none; align-items: flex-start; justify-content: center; padding-top: 40px;
+        }
+        #admin-box {
+            background: linear-gradient(145deg, #1a1a1a, #111);
+            border: 4px solid #FF5252; border-radius: 20px; padding: 32px 36px;
+            max-width: 640px; width: 93%; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 0 50px rgba(255,82,82,0.3);
+        }
+        #admin-box h2 { color: #FF5252; margin: 0 0 4px 0; font-size: 22px; letter-spacing: 2px; }
+        #admin-box p  { color: #888; font-size: 13px; margin: 0 0 20px 0; }
+        .admin-user-row {
+            display: flex; align-items: center; gap: 10px;
+            background: #111; border: 1px solid #333; border-radius: 10px;
+            padding: 11px 14px; margin-bottom: 8px;
+        }
+        .admin-user-info { flex: 1; }
+        .admin-user-name { font-size: 15px; font-weight: 900; color: #fff; }
+        .admin-user-meta { font-size: 12px; color: #777; margin-top: 2px; }
+        .admin-del-btn {
+            background: #FF5252; border: none; color: #fff; font-weight: 900;
+            font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+        }
+        .admin-del-btn:hover { background: #D32F2F; }
+        #admin-msg { color: #8BC34A; font-size: 14px; min-height: 20px; margin-bottom: 10px; font-weight: bold; }
+        #admin-btn {
+            background: linear-gradient(180deg, #FF5252, #B71C1C); border: 2px solid #7f0000;
+            box-shadow: 0 4px 0 #4a0000, 0 8px 16px rgba(0,0,0,0.5);
+        }
+        #lobby-box {
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            border: 4px solid #8BC34A; border-radius: 20px; padding: 40px;
+            max-width: 480px; width: 90%;
+            box-shadow: 0 0 50px rgba(139,195,74,0.35), 0 20px 40px rgba(0,0,0,0.8);
+            text-align: center;
+        }
+        /* --- LOBBY BOX SHARED --- */
+        #lobby-box { text-align: center; }
+        #lobby-box h2 { color: #8BC34A; font-size: 24px; margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 2px; }
+        #lobby-box p  { color: #aaa; font-size: 14px; margin: 0 0 18px 0; }
+        .lobby-input {
+            width: calc(100% - 24px); padding: 11px; font-size: 17px; font-weight: bold;
+            background: #111; color: #fff; border: 2px solid #555; border-radius: 8px;
+            margin-bottom: 12px; text-align: center; display: block; box-sizing: border-box;
+        }
+        .lobby-input:focus { border-color: #8BC34A; outline: none; }
+        .lobby-color-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; color: #ddd; font-size: 15px; font-weight: bold; }
+        .lobby-color-row input[type="color"] { width: 44px; height: 38px; border: 2px solid #555; border-radius: 6px; cursor: pointer; padding: 0; background: none; }
+        .lobby-msg { color: #FF5252; font-size: 14px; min-height: 20px; margin-bottom: 8px; }
+        .lobby-back-btn { background: none; border: 1px solid #555; color: #aaa; font-size: 14px; padding: 8px 20px; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        .lobby-back-btn:hover { border-color: #aaa; color: #fff; }
+
+        /* --- LOBBY BROWSER --- */
+        #lobby-browser-screen { width: 100%; }
+        .lobby-list-item {
+            display: flex; align-items: center; gap: 10px;
+            background: #111; padding: 12px 16px; border-radius: 10px;
+            margin-bottom: 8px; border: 2px solid #333; text-align: left;
+            transition: border-color 0.2s;
+        }
+        .lobby-list-item:hover { border-color: #555; }
+        .lobby-list-info { flex: 1; }
+        .lobby-list-name { font-size: 16px; font-weight: 900; color: #fff; }
+        .lobby-list-meta { font-size: 13px; color: #888; margin-top: 2px; }
+        .lobby-list-started { font-size: 12px; color: #FF8F00; font-weight: bold; }
+        .lobby-join-btn {
+            background: linear-gradient(180deg, #448AFF, #1565C0); border: 2px solid #0D47A1;
+            color: #fff; font-weight: 900; font-size: 13px; padding: 8px 14px;
+            border-radius: 8px; cursor: pointer; white-space: nowrap;
+        }
+        .lobby-join-btn:disabled { background: #333; border-color: #444; color: #666; cursor: not-allowed; }
+        #lobby-empty-msg { color: #666; font-size: 15px; padding: 20px 0; }
+        #lobby-rooms-count { font-size: 12px; color: #666; text-align: right; margin-bottom: 8px; }
+
+        /* --- LOBBY WAITING ROOM --- */
+        .lobby-player-row {
+            display: flex; align-items: center; gap: 10px;
+            background: #111; padding: 11px 16px; border-radius: 10px;
+            margin-bottom: 8px; font-size: 17px; font-weight: bold;
+            border: 2px solid #333; text-align: left;
+        }
+        .lobby-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); flex-shrink: 0; }
+        .lobby-badge { font-size: 11px; background: #8BC34A; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: 900; margin-left: auto; }
+        .lobby-you-badge { font-size: 11px; background: #448AFF; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: 900; }
+        #lobby-player-list { margin: 14px 0; }
+        #lobby-waiting-msg { color: #aaa; font-size: 15px; margin: 10px 0 0 0; }
+
+        /* --- JOIN REQUEST POPUP (for host) --- */
+        #join-request-popup {
+            position: fixed; top: 20px; right: 20px; z-index: 9000;
+            display: flex; flex-direction: column; gap: 10px;
+            max-width: 300px;
+        }
+        .join-req-card {
+            background: #1a1a1a; border: 2px solid #8BC34A; border-radius: 14px;
+            padding: 16px 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateX(320px); opacity:0; } to { transform: translateX(0); opacity:1; } }
+        .join-req-name { font-size: 16px; font-weight: 900; margin-bottom: 4px; }
+        .join-req-sub { font-size: 13px; color: #888; margin-bottom: 12px; }
+        .join-req-btns { display: flex; gap: 8px; }
+        .join-req-accept { flex:1; background: #8BC34A; border:none; color:#000; font-weight:900; font-size:14px; padding:8px; border-radius:8px; cursor:pointer; }
+        .join-req-deny   { flex:1; background: #333; border: 1px solid #555; color:#ddd; font-weight:bold; font-size:14px; padding:8px; border-radius:8px; cursor:pointer; }
+
     </style>
 </head>
 <body>
 
-    <div id="login-screen" class="screen active">
-        <h1>🗑️ Dumpster Dice</h1>
-        <p style="color: #aaa;">Enter a username to join the server</p>
-        <input type="text" id="username-input" placeholder="Enter Username..." autocomplete="off" maxlength="15">
-        <button id="join-btn">Sign In & Connect</button>
+    <div id="login-overlay">
+        <div id="login-box">
+            <h1>🗑️ DUMPSTER DICE</h1>
+            <p>Sign in to save your rank, charms, and money across devices</p>
+            <form onsubmit="doLogin(); return false;" autocomplete="on">
+                <input class="auth-input" id="auth-username" type="text" placeholder="Username" maxlength="20"
+                    autocomplete="username" />
+                <input class="auth-input" id="auth-password" type="password" placeholder="Password"
+                    autocomplete="current-password" />
+                <div id="auth-msg"></div>
+                <div class="auth-btn-row">
+                    <button type="submit" class="btn-large">SIGN IN 🎲</button>
+                    <button type="button" class="btn-large" id="auth-register-btn" onclick="doRegister()">REGISTER</button>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <div id="menu-screen" class="screen">
-        <h1>Dumpster Dice</h1>
-        <p style="color: #aaa;">Welcome, <span id="player-name" style="color:#4CAF50; font-weight:bold;"></span>!</p>
-        <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
-        
-        <button class="menu-btn" onclick="selectMode('Basic Game')">1. Basic Game</button>
-        <button class="menu-btn" onclick="selectMode('Tidy Trash')">2. Tidy Trash</button>
-        <button class="menu-btn" onclick="selectMode('Dump & Dash')">3. Dump & Dash</button>
-        <button class="menu-btn" onclick="selectMode('Bin Battle')">4. Bin Battle</button>
-        <button class="menu-btn" onclick="selectMode('Waste War')">5. Waste War</button>
+    <div id="admin-overlay" style="display:none;">
+        <div id="admin-box">
+            <h2>⚙️ ADMIN PANEL</h2>
+            <p>Logged in as Bingle Berry — full account control</p>
+            <div id="admin-msg"></div>
+            <div id="admin-user-list"><div style="color:#666;">Loading...</div></div>
+            <br>
+            <button class="lobby-back-btn" onclick="closeAdmin()">← Close</button>
+        </div>
     </div>
 
-    <div id="game-screen" class="screen">
-        <h2 id="current-mode-title" style="color: #4CAF50;">Match Room</h2>
-        
-        <div class="dice-container" id="dice-display">🎲</div>
-        
-        <button id="roll-btn">Roll Dice</button>
-        <button class="menu-btn" onclick="backToMenu()" style="margin-top:20px; background:#aa3333; text-align:center; padding-left:0;">Leave Match</button>
-        
-        <h3 style="text-align: left; margin-bottom: 5px; font-size: 14px; color: #888;">Live Activity Log:</h3>
-        <div id="log"></div>
+    <div id="lobby-overlay">
+        <div id="lobby-box">
+
+            <div id="lobby-browser-screen">
+                <h2>🌐 Online Lobbies</h2>
+                <p>Join an existing lobby or create your own</p>
+                <div id="lobby-rooms-count"></div>
+                <div id="lobby-list-container">
+                    <div id="lobby-empty-msg">No lobbies yet — be the first to create one!</div>
+                </div>
+                <div class="lobby-msg" id="lobby-browser-msg"></div>
+                <button class="btn-large" style="width:100%;margin-top:8px;" onclick="showLobbyScreen('lobby-create-screen')">+ CREATE NEW LOBBY</button>
+                <button class="lobby-back-btn" onclick="closeLobby()">← Back to Main Menu</button>
+            </div>
+
+            <div id="lobby-create-screen" style="display:none;">
+                <h2>🎲 Create Lobby</h2>
+                <p>Set your name and lobby title</p>
+                <input class="lobby-input" id="create-name-input" type="text" placeholder="Your Name" maxlength="12" />
+                <div class="lobby-color-row">
+                    <span>Your Color:</span>
+                    <input type="color" id="create-color-input" value="#FF5252" />
+                </div>
+                <input class="lobby-input" id="create-room-name-input" type="text" placeholder="Lobby Name (optional)" maxlength="24" />
+                <div class="lobby-msg" id="lobby-create-msg"></div>
+                <button class="btn-large" style="width:100%;margin-top:0;" onclick="doCreateLobby()">CREATE LOBBY 🎲</button>
+                <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Back</button>
+            </div>
+
+            <div id="lobby-request-screen" style="display:none;">
+                <h2>🚪 Request to Join</h2>
+                <p id="lobby-request-subtitle">Enter your name to send a join request</p>
+                <input class="lobby-input" id="request-name-input" type="text" placeholder="Your Name" maxlength="12" />
+                <div class="lobby-color-row">
+                    <span>Your Color:</span>
+                    <input type="color" id="request-color-input" value="#448AFF" />
+                </div>
+                <div class="lobby-msg" id="lobby-request-msg"></div>
+                <button class="btn-large" style="width:100%;margin-top:0;" onclick="sendJoinRequest()">SEND REQUEST 🚪</button>
+                <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Cancel</button>
+            </div>
+
+        </div>
     </div>
 
     <script>
-        // Connects to Render network
+        // 1. Correct Socket Connection for Render
         const socket = io();
 
-        const loginScreen = document.getElementById('login-screen');
-        const menuScreen = document.getElementById('menu-screen');
-        const gameScreen = document.getElementById('game-screen');
+        // 2. PASTE YOUR ORIGINAL JAVASCRIPT BELOW THIS LINE:
         
-        const usernameInput = document.getElementById('username-input');
-        const joinBtn = document.getElementById('join-btn');
-        const playerNameSpan = document.getElementById('player-name');
-        const currentModeTitle = document.getElementById('current-mode-title');
-        const rollBtn = document.getElementById('roll-btn');
-        const diceDisplay = document.getElementById('dice-display');
-        const logDiv = document.getElementById('log');
 
-        let currentUsername = "";
-
-        // Sign In
-        joinBtn.addEventListener('click', () => {
-            const username = usernameInput.value.trim();
-            if (username === "") {
-                alert("Please enter a username to sign in!");
-                return;
-            }
-            
-            currentUsername = username;
-            playerNameSpan.textContent = currentUsername;
-
-            socket.emit('playerLogin', { username: currentUsername });
-
-            // Swap to menu
-            changeScreen(menuScreen);
-            addLog("Successfully connected to the server.");
-        });
-
-        // Menu Navigation
-        function selectMode(modeName) {
-            currentModeTitle.textContent = modeName;
-            socket.emit('joinMode', { mode: modeName });
-            changeScreen(gameScreen);
-            addLog(`Entered match lobby for [${modeName}]`);
-        }
-
-        function backToMenu() {
-            socket.emit('leaveMode');
-            changeScreen(menuScreen);
-            diceDisplay.textContent = "🎲";
-        }
-
-        // Rolling Action
-        rollBtn.addEventListener('click', () => {
-            socket.emit('requestRoll');
-        });
-
-        socket.on('connect', () => {
-            console.log("Connected to server!");
-        });
-
-        socket.on('rollResult', (data) => {
-            diceDisplay.textContent = "🎲 " + data.roll;
-            
-            diceDisplay.style.transform = "scale(1.2)";
-            setTimeout(() => { diceDisplay.style.transform = "scale(1)"; }, 150);
-            
-            const displayingIdentity = data.playerID ? data.playerID.substring(0, 5) : "Player";
-            addLog(`User [${displayingIdentity}] rolled a: ${data.roll}`);
-        });
-
-        // FIXED Helper Function
-        function changeScreen(targetView) {
-            loginScreen.classList.remove('active');
-            menuScreen.classList.remove('active');
-            gameScreen.classList.remove('active');
-            targetView.classList.add('active'); // Fixed this line!
-        }
-
-        function addLog(textString) {
-            const logEntry = document.createElement('p');
-            logEntry.style.margin = "5px 0";
-            logEntry.textContent = `> ${textString}`;
-            logDiv.appendChild(logEntry);
-            logDiv.scrollTop = logDiv.scrollHeight; 
-        }
     </script>
 </body>
 </html>
