@@ -59,7 +59,7 @@ pool.connect(async (err, client, release) => {
     } catch (dbErr) {
       console.error('❌ Failed to build database tables:', dbErr);
     } finally {
-      release(); // Always release the client back to the pool
+      release(); 
     }
   }
 });
@@ -329,6 +329,16 @@ io.on('connection', (socket) => {
     } catch(e) { console.error(e); socket.emit('adminError', 'Delete failed'); }
   });
 
+  // NEW: God Mode Listener
+  socket.on('adminTriggerGodMode', ({ adminUsername, targetUsername }) => {
+    if (adminUsername !== 'Bingle Berry') { 
+      socket.emit('adminError', 'Unauthorized. Only Bingle Berry has this power.'); 
+      return; 
+    }
+    console.log(`⚡ Admin granted God Mode to: ${targetUsername}`);
+    io.emit('godModeActivated', { targetUsername }); 
+  });
+
   socket.on('disconnect', () => {
     console.log('Disconnected: ' + socket.id);
     for (const room of rooms.values()) {
@@ -338,6 +348,8 @@ io.on('connection', (socket) => {
     if (!room) { broadcastLobbyList(); return; }
     const wasHost = socket.id === room.hostSocketId;
     room.players = room.players.filter(p => p.socketId !== socket.id);
+    
+    // Automatically closes the room if all human sockets are gone
     if (room.players.length === 0) {
       closeRoom(room, 'All players left');
     } else if (wasHost) {
@@ -355,3 +367,14 @@ io.on('connection', (socket) => {
 /* --- PORT FIX --- */
 const PORT = process.env.PORT || 5000;
 http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+/* --- LEADERBOARD AUTO-REFRESH (Every 3 mins) --- */
+setInterval(async () => {
+  try {
+    const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
+    // Broadcasts the updated leaderboard to all connected players
+    io.emit('leaderboardData', r.rows);
+  } catch (e) {
+    console.error('Auto-leaderboard update error:', e);
+  }
+}, 3 * 60 * 1000); // 3 minutes in milliseconds
