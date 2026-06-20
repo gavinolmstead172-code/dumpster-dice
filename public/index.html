@@ -525,6 +525,7 @@
 </head>
 <body>
 
+    <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
         <div id="login-box">
             <h1>🗑️ DUMPSTER DICE</h1>
@@ -543,6 +544,7 @@
         </div>
     </div>
 
+    <!-- ADMIN OVERLAY -->
     <div id="admin-overlay" style="display:none;">
         <div id="admin-box">
             <h2>⚙️ ADMIN PANEL</h2>
@@ -554,9 +556,11 @@
         </div>
     </div>
 
+    <!-- LOBBY OVERLAY -->
     <div id="lobby-overlay">
         <div id="lobby-box">
 
+            <!-- SCREEN 1: Lobby Browser -->
             <div id="lobby-browser-screen">
                 <h2>🌐 Online Lobbies</h2>
                 <p>Join an existing lobby or create your own</p>
@@ -569,6 +573,7 @@
                 <button class="lobby-back-btn" onclick="closeLobby()">← Back to Main Menu</button>
             </div>
 
+            <!-- SCREEN 2: Create a Lobby -->
             <div id="lobby-create-screen" style="display:none;">
                 <h2>🎲 Create Lobby</h2>
                 <p>Set your name and lobby title</p>
@@ -583,172 +588,345 @@
                 <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Back</button>
             </div>
 
+            <!-- SCREEN 3: Enter name to request joining -->
             <div id="lobby-request-screen" style="display:none;">
                 <h2>🚪 Request to Join</h2>
                 <p id="lobby-request-subtitle">Enter your name to send a join request</p>
-                <input class="lobby-input" id="request-name-input" type="text" placeholder="Your Name" maxlength="12" />
-                is it this     <div class="lobby-color-row">
-                    <span>Your Color:</span>
-                    <input type="color" id="request-color-input" value="#448AFF" />
-                </div>
-                <div class="lobby-msg" id="lobby-request-msg"></div>
-                <button class="btn-large" style="width:100%;margin-top:0;" onclick="doRequestJoin()">SEND REQUEST ✉️</button>
-                <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Back</button>
-            </div>
+          
+            </div>
 
-            <!-- SCREEN 4: Waiting for host approval -->
-            <div id="lobby-pending-screen" style="display:none;">
-                <h2>⏳ Request Sent!</h2>
-                <p id="lobby-pending-subtitle">Waiting for the host to approve your request...</p>
-                <div style="font-size:48px;margin:20px 0;">🎲</div>
-                <div class="lobby-msg" id="lobby-pending-msg"></div>
-                <button class="lobby-back-btn" onclick="cancelJoinRequest()">Cancel Request</button>
-        <div class="spinner-text">Spinning</div>
-    </div>
+            <!-- SCREEN 5: Waiting room (after approved / after creating) -->
+            <div id="lobby-waiting-screen" style="display:none;">
+                <h2 id="lobby-title">Lobby</h2>
+                <p id="lobby-subtitle">Share this page link with friends!</p>
+                <div id="lobby-player-list"></div>
+                <p id="lobby-waiting-msg">Waiting for host to start the game...</p>
+                <button id="lobby-start-btn" class="btn-large" style="width:100%;display:none;" onclick="hostStartGame()">START GAME 🎲</button>
+                <button class="lobby-back-btn" style="margin-top:14px;" onclick="leaveLobby()">← Leave Lobby</button>
+            </div>
 
-    <h1>Dumpster Dice</h1>
-    
-    <div id="main-menu">
-        
-        <div class="menu-panel">
-            <h2>Game Setup</h2>
-            <div class="menu-row" style="border-left-color: #FF9800; background: #2a1b0a;">
-                <h3 style="color: #FFb74D; margin: 0; width: 120px; text-align: left;">Game Mode</h3>
-                <div class="menu-controls">
-                    <select id="game-mode-select" onchange="updateRulesDisplay()">
-                        <option value="basic">Basic Game</option>
-                        <option value="tidy">Tidy Trash</option>
-                        <option value="dash">Dump & Dash</option>
-                        <option value="battle">Bin Battle</option>
-                        <option value="war">Waste War</option>
-                    </select>
-                </div>
-            </div>
-
-            <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0;">
-                <label style="font-size: 18px; font-weight: bold; margin-right: 10px;">Number of Players:</label>
-                <select id="player-count-select" onchange="generateMenuRows()">
-                    <option value="2">2 Players</option>
-                    <option value="3">3 Players</option>
-                    <option value="4" selected>4 Players</option>
-                </select>
-            </div>
-
-            <div id="player-configs"></div>
-
-            <div id="rank-up-warning">⚠️ RANK UP GAME DETECTED! ⚠️</div>
-
-            <div class="audio-btn-row">
-                <button class="audio-toggle" id="music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
-                <button class="audio-toggle" id="sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
-            </div>
-            <br>
-            <button class="btn-large" onclick="startGame()">START GAME 🎲</button>
-            <button class="btn-large" style="background: linear-gradient(180deg, #448AFF, #1565C0); border-color: #0D47A1; box-shadow: 0 6px 0 #0D47A1, 0 10px 20px rgba(0,0,0,0.5);" onclick="openLobby()">PLAY ONLINE 🌐</button>
-            <button class="btn-large" id="admin-btn" style="display:none;" onclick="openAdmin()">ADMIN ⚙️</button>
-        </div>
-
-        <div class="menu-panel" style="border-color: #8BC34A;">
-            <h2 style="color: #8BC34A; text-shadow: 0 0 10px rgba(139, 195, 74, 0.5); margin-top: 0;">How To Play</h2>
-            <div id="rules-text" style="min-height: 120px; font-size: 16px;"></div>
-            <hr style="border-color: #444; margin: 20px 0;">
-            <h2 style="color: #00E5FF; text-shadow: 0 0 10px rgba(0, 229, 255, 0.5); margin-top: 0;">Ranked Leaderboard</h2>
-            <ul class="leaderboard-list" id="leaderboard-list"></ul>
-        </div>
-
-        <div class="menu-panel" style="border-color: #FFD700;">
-            <div class="shop-header">
-                <h2 style="margin: 0; color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);">Charm Shop</h2>
-                <div class="wallet">💵 $<span id="wallet-balance">0</span></div>
-            </div>
-            
-            <p style="color: #aaa; margin-top: -5px; margin-bottom: 15px;">Win matches to earn money. Rank up for $25!</p>
-            
-            <div class="shop-cases">
-                <button class="case-btn case-common" onclick="buyCase(25)">Common Case<br>$25
-                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💩 40%</div><div>🪰 25%</div><div>🧻 17%</div><div>🍌 11%</div><div>🐟 6%</div></div><div class="tooltip-chase">1% Chance: 👽</div></div>
-                </button>
-                <button class="case-btn case-rare" onclick="buyCase(50)">Rare Case<br>$50
-                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>🍔 40%</div><div>🍕 25%</div><div>🌭 17%</div><div>🌮 11%</div><div>🍟 6%</div></div><div class="tooltip-chase">1% Chance: 🦖</div></div>
-                </button>
-                <button class="case-btn case-epic" onclick="buyCase(100)">Epic Case<br>$100
-                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💎 40%</div><div>👑 25%</div><div>🏆 17%</div><div>🌟 11%</div><div>🌈 6%</div></div><div class="tooltip-chase">1% Chance: 🌌</div></div>
-                </button>
-            </div>
-
-            <h3 style="margin-bottom: 10px; color: #ddd; text-align: left;">Your Charms</h3>
-            <div class="inventory-grid" id="inventory-grid"></div>
-            <div id="shop-message" style="height: 20px; margin-top: 10px; font-weight: bold; color: #8BC34A;"></div>
-        </div>
-
-        <div class="menu-panel" style="border-color: #00E5FF;">
-            <h2 style="color: #00E5FF; margin-top: 0;">Daily Challenges</h2>
-            <div id="challenges-container" style="text-align: left; background: #111; padding: 15px; border-radius: 10px; border: 2px solid #444;"></div>
-            <p style="color: #aaa; font-size: 12px;">Challenges reset when you refresh!</p>
-        </div>
-
-    </div>
-
-    <div id="game-ui">
-        <div class="in-game-header">
-            <button class="header-btn" onclick="goToMainMenu()">🔙 Main Menu</button>
-            <button class="header-btn" id="in-game-music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
-            <button class="header-btn" id="in-game-sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
-        </div>
-
-        <div class="central-hub" id="hub">
-            <h2 style="margin-top:0;">Shared Track</h2>
-            <div class="board" id="shared-board"></div>
-            <div class="dumpster" id="dumpster-box">
-                🗑️ Dumpster: <span id="dumpster-count">0</span>
-            </div>
-        </div>
-
-        <div id="action-log">Waiting to start...</div>
-        <br>
-        <button id="roll-btn" class="btn-large" style="width: auto;" onclick="executeRoll()">ROLL DICE</button>
-
-        <div id="game-over-controls" style="display: none; margin-top: 20px;">
-            <h3 id="streak-display" style="color: #FFD700; margin-bottom: 10px; display: none;">🔥 Win Streak: <span id="streak-count">0</span> (x<span id="streak-mult">1</span> Bonus!)</h3>
-            <button id="don-btn" class="btn-large" style="background: linear-gradient(180deg, #D50000, #9b0000); border-color: #5c0000; display: none; width: auto;" onclick="startDoubleOrNothing()">DOUBLE OR NOTHING 🎲💀</button>
-            <br>
-            <button class="btn-large" style="width: auto;" onclick="playAgain()">PLAY AGAIN 🔄</button>
-            <button class="btn-large btn-menu" onclick="goToMainMenu()">MAIN MENU 🏠</button>
-        </div>
-
-        <div class="game-container" id="game-container"></div>
-    </div>
-
-    <!-- CHAT PANEL -->
-    <div id="chat-panel">
-        <button id="chat-toggle-btn" onclick="toggleChat()">💬 CHAT</button>
-        <div id="chat-box">
-            <div id="chat-messages"></div>
-            <div id="chat-input-row">
-                <input id="chat-input" type="text" placeholder="Say something..." maxlength="100"
-                    onkeydown="if(event.key==='Enter') sendChat()" />
-                <button id="chat-send-btn" onclick="sendChat()">SEND</button>
-            </div>
-        </div>
-    </div>
-<div id="join-request-popup"></div>
-
-    <div id="spinner-overlay">
-        <div class="spinner-box">🎲</div>
-        <div class="spinner-text">Loading...</div>
+        </div>
     </div>
 
+    <!-- JOIN REQUEST POPUPS (shown to host) -->
+    <div id="join-request-popup"></div>
+
     <div id="case-opening-modal">
+        <h2 style="color: #FFD700; margin-bottom: 30px; font-size: 36px; text-shadow: 0 0 20px #FFD700;">Opening Case...</h2>
         <div class="case-window-container">
             <div class="case-target-line"></div>
             <div id="case-slider-strip"></div>
         </div>
         <div id="case-opening-result"></div>
-        <button id="close-case-btn" onclick="closeCaseOpening()">COLLECT</button>
+        <button id="close-case-btn" onclick="closeCaseAnimation()">Collect Item</button>
     </div>
 
+    <div id="spinner-overlay">
+        <h2 style="color: white; font-size: 40px; margin-bottom: 30px;">Deciding who goes first...</h2>
+        <div class="spinner-box" id="spinner-result">Player 1</div>      <input class="lobby-input" id="request-name-input" type="text" placeholder="Your Name" maxlength="12" />
+                <div class="lobby-color-row">
+                    <span>Your Color:</span>
+                    <input type="color" id="request-color-input" value="#448AFF" />
+                </div>
+                <div class="lobby-msg" id="lobby-request-msg"></div>
+                <button class="btn-large" style="width:100%;margin-top:0;" onclick="doRequestJoin()">SEND REQUEST ✉️</button>
+                <button class="lobby-back-btn" onclick="showLobbyScreen('lobby-browser-screen')">← Back</button>
+            </div>
+
+            <!-- SCREEN 4: Waiting for host approval -->
+            <div id="lobby-pending-screen" style="display:none;">
+                <h2>⏳ Request Sent!</h2>
+                <p id="lobby-pending-subtitle">Waiting for the host to approve your request...</p>
+                <div style="font-size:48px;margin:20px 0;">🎲</div>
+                <div class="lobby-msg" id="lobby-pending-msg"></div>
+                <button class="lobby-back-btn" onclick="cancelJoinRequest()">Cancel Request</button>
+        <div class="spinner-text">Spinning</div>
+    </div>
+
+    <h1>Dumpster Dice</h1>
+    
+    <div id="main-menu">
+        
+        <div class="menu-panel">
+            <h2>Game Setup</h2>
+            <div class="menu-row" style="border-left-color: #FF9800; background: #2a1b0a;">
+                <h3 style="color: #FFb74D; margin: 0; width: 120px; text-align: left;">Game Mode</h3>
+                <div class="menu-controls">
+                    <select id="game-mode-select" onchange="updateRulesDisplay()">
+                        <option value="basic">Basic Game</option>
+                        <option value="tidy">Tidy Trash</option>
+                        <option value="dash">Dump & Dash</option>
+                        <option value="battle">Bin Battle</option>
+                        <option value="war">Waste War</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: center; margin: 20px 0;">
+                <label style="font-size: 18px; font-weight: bold; margin-right: 10px;">Number of Players:</label>
+                <select id="player-count-select" onchange="generateMenuRows()">
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4" selected>4 Players</option>
+                </select>
+            </div>
+
+            <div id="player-configs"></div>
+
+            <div id="rank-up-warning">⚠️ RANK UP GAME DETECTED! ⚠️</div>
+
+            <div class="audio-btn-row">
+                <button class="audio-toggle" id="music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
+                <button class="audio-toggle" id="sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
+            </div>
+            <br>
+            <button class="btn-large" onclick="startGame()">START GAME 🎲</button>
+            <button class="btn-large" style="background: linear-gradient(180deg, #448AFF, #1565C0); border-color: #0D47A1; box-shadow: 0 6px 0 #0D47A1, 0 10px 20px rgba(0,0,0,0.5);" onclick="openLobby()">PLAY ONLINE 🌐</button>
+            <button class="btn-large" id="admin-btn" style="display:none;" onclick="openAdmin()">ADMIN ⚙️</button>
+        </div>
+
+        <div class="menu-panel" style="border-color: #8BC34A;">
+            <h2 style="color: #8BC34A; text-shadow: 0 0 10px rgba(139, 195, 74, 0.5); margin-top: 0;">How To Play</h2>
+            <div id="rules-text" style="min-height: 120px; font-size: 16px;"></div>
+            <hr style="border-color: #444; margin: 20px 0;">
+            <h2 style="color: #00E5FF; text-shadow: 0 0 10px rgba(0, 229, 255, 0.5); margin-top: 0;">Ranked Leaderboard</h2>
+            <ul class="leaderboard-list" id="leaderboard-list"></ul>
+        </div>
+
+        <div class="menu-panel" style="border-color: #FFD700;">
+            <div class="shop-header">
+                <h2 style="margin: 0; color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);">Charm Shop</h2>
+                <div class="wallet">💵 $<span id="wallet-balance">0</span></div>
+            </div>
+            
+            <p style="color: #aaa; margin-top: -5px; margin-bottom: 15px;">Win matches to earn money. Rank up for $25!</p>
+            
+            <div class="shop-cases">
+                <button class="case-btn case-common" onclick="buyCase(25)">Common Case<br>$25
+                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💩 40%</div><div>🪰 25%</div><div>🧻 17%</div><div>🍌 11%</div><div>🐟 6%</div></div><div class="tooltip-chase">1% Chance: 👽</div></div>
+                </button>
+                <button class="case-btn case-rare" onclick="buyCase(50)">Rare Case<br>$50
+                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>🍔 40%</div><div>🍕 25%</div><div>🌭 17%</div><div>🌮 11%</div><div>🍟 6%</div></div><div class="tooltip-chase">1% Chance: 🦖</div></div>
+                </button>
+                <button class="case-btn case-epic" onclick="buyCase(100)">Epic Case<br>$100
+                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💎 40%</div><div>👑 25%</div><div>🏆 17%</div><div>🌟 11%</div><div>🌈 6%</div></div><div class="tooltip-chase">1% Chance: 🌌</div></div>
+                </button>
+            </div>
+
+            <h3 style="margin-bottom: 10px; color: #ddd; text-align: left;">Your Charms</h3>
+            <div class="inventory-grid" id="inventory-grid"></div>
+            <div id="shop-message" style="height: 20px; margin-top: 10px; font-weight: bold; color: #8BC34A;"></div>
+        </div>
+
+        <div class="menu-panel" style="border-color: #00E5FF;">
+            <h2 style="color: #00E5FF; margin-top: 0;">Daily Challenges</h2>
+            <div id="challenges-container" style="text-align: left; background: #111; padding: 15px; border-radius: 10px; border: 2px solid #444;"></div>
+            <p style="color: #aaa; font-size: 12px;">Challenges reset when you refresh!</p>
+        </div>
+
+    </div>
+
+    <div id="game-ui">
+        <div class="in-game-header">
+            <button class="header-btn" onclick="goToMainMenu()">🔙 Main Menu</button>
+            <button class="header-btn" id="in-game-music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
+            <button class="header-btn" id="in-game-sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
+        </div>
+
+        <div class="central-hub" id="hub">
+            <h2 style="margin-top:0;">Shared Track</h2>
+            <div class="board" id="shared-board"></div>
+            <div class="dumpster" id="dumpster-box">
+                🗑️ Dumpster: <span id="dumpster-count">0</span>
+            </div>
+        </div>
+
+        <div id="action-log">Waiting to start...</div>
+        <br>
+        <button id="roll-btn" class="btn-large" style="width: auto;" onclick="executeRoll()">ROLL DICE</button>
+
+        <div id="game-over-controls" style="display: none; margin-top: 20px;">
+            <h3 id="streak-display" style="color: #FFD700; margin-bottom: 10px; display: none;">🔥 Win Streak: <span id="streak-count">0</span> (x<span id="streak-mult">1</span> Bonus!)</h3>
+            <button id="don-btn" class="btn-large" style="background: linear-gradient(180deg, #D50000, #9b0000); border-color: #5c0000; display: none; width: auto;" onclick="startDoubleOrNothing()">DOUBLE OR NOTHING 🎲💀</button>
+            <br>
+            <button class="btn-large" style="width: auto;" onclick="playAgain()">PLAY AGAIN 🔄</button>
+            <button class="btn-large btn-menu" onclick="goToMainMenu()">MAIN MENU 🏠</button>
+        </div>
+
+        <div class="game-container" id="game-container"></div>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div id="chat-panel">
+        <button id="chat-toggle-btn" onclick="toggleChat()">💬 CHAT</button>
+        <div id="chat-box">
+            <div id="chat-messages"></div>
+            <div id="chat-input-row">
+                <input id="chat-input" type="text" placeholder="Say something..." maxlength="100"
+                    onkeydown="if(event.key==='Enter') sendChat()" />
+                <button id="chat-send-btn" onclick="sendChat()">SEND</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script>
-        // ⚠️ PASTE ALL OF YOUR ORIGINAL JAVASCRIPT RIGHT HERE ⚠️
-    </script>
-</body>
-</html>
+        /* --- SOCKET.IO SETUP --- */
+        const socket = io();
+
+        let amIHost = false;
+        let mySocketId = null;
+        let myPlayerIndex = -1;
+        let isLobbyGame = false;
+        let lobbyPlayerList = [];
+        let clientHumanPlayerMap = {};
+        let isWaitingForExternalRoll = false;
+        let pendingHumanRollCallback = null;
+        let stateSyncTimer = null;
+        let lastTurnNotified = -1;
+        let myRoomId = null;
+        let pendingJoinRoomId = null;
+        let loggedInUser = null;
+
+        socket.on('connect', () => {
+            mySocketId = socket.id;
+            console.log('Connected to server:', socket.id);
+        });
+
+        /* --- AUTH HANDLERS --- */
+        function doLogin() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!username || !password) { setAuthMsg('Enter username and password'); return; }
+            setAuthMsg('Signing in…', false);
+            socket.emit('login', { username, password });
+        }
+
+        function doRegister() {
+            const username = document.getElementById('auth-username').value.trim();
+            const password = document.getElementById('auth-password').value;
+            if (!username || !password) { setAuthMsg('Enter username and password'); return; }
+            if (password.length < 4) { setAuthMsg('Password must be at least 4 characters'); return; }
+            setAuthMsg('Creating account…', false);
+            socket.emit('register', { username, password });
+        }
+
+        function setAuthMsg(msg, isError = true) {
+            const el = document.getElementById('auth-msg');
+            el.innerText = msg;
+            el.className = isError ? '' : 'success';
+        }
+
+        socket.on('authSuccess', (profile) => {
+            loggedInUser = profile;
+            applyServerProfile(profile);
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+            generateMenuRows();
+            loadStats(); loadEconomy(); renderChallenges(); checkRankUpStatus();
+            if (profile.username === 'Bingle Berry') {
+                document.getElementById('admin-btn').style.display = 'inline-block';
+            }
+            console.log('Logged in as:', profile.username);
+        });
+
+        socket.on('authError', (msg) => {
+            setAuthMsg(msg);
+        });
+
+        function applyServerProfile(profile) {
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            stats[profile.username] = { mmr: profile.mmr, wins: profile.wins, losses: profile.losses };
+            localStorage.setItem('dumpsterStats', JSON.stringify(stats));
+            localStorage.setItem('dumpsterMoney', profile.money);
+            localStorage.setItem('dumpsterInventory', JSON.stringify(profile.inventory));
+            if (profile.equippedCharm) localStorage.setItem('dumpsterEquippedCharm', profile.equippedCharm);
+            else localStorage.removeItem('dumpsterEquippedCharm');
+        }
+
+        /* --- ADMIN FUNCTIONS --- */
+        function openAdmin() {
+            document.getElementById('admin-overlay').style.display = 'flex';
+            document.getElementById('admin-msg').innerText = '';
+            document.getElementById('admin-user-list').innerHTML = '<div style="color:#666;">Loading...</div>';
+            socket.emit('adminGetUsers', { username: loggedInUser.username });
+        }
+
+        function closeAdmin() {
+            document.getElementById('admin-overlay').style.display = 'none';
+        }
+
+        function adminConfirmDelete(targetUsername) {
+            if (!confirm(`Delete account "${targetUsername}"? This cannot be undone.`)) return;
+            socket.emit('adminDeleteUser', { adminUsername: loggedInUser.username, targetUsername });
+        }
+
+        socket.on('adminUsersList', (users) => {
+            const list = document.getElementById('admin-user-list');
+            if (!list) return;
+            if (users.length === 0) { list.innerHTML = '<div style="color:#666;">No accounts found.</div>'; return; }
+            list.innerHTML = '';
+            users.forEach(u => {
+                const isAdmin = u.username === 'Bingle Berry';
+                const date = new Date(u.created_at).toLocaleDateString();
+                list.innerHTML += `
+                    <div class="admin-user-row">
+                        <div class="admin-user-info">
+                            <div class="admin-user-name">${u.username}${isAdmin ? ' 👑' : ''}</div>
+                            <div class="admin-user-meta">MMR: ${u.mmr} &nbsp;·&nbsp; Wins: ${u.wins} &nbsp;·&nbsp; 💵 $${u.money} &nbsp;·&nbsp; Joined: ${date}</div>
+                        </div>
+                        ${!isAdmin ? `<button class="admin-del-btn" onclick="adminConfirmDelete('${u.username}')">🗑 Delete</button>` : '<span style="color:#888;font-size:12px;">ADMIN</span>'}
+                    </div>`;
+            });
+        });
+
+        socket.on('adminDeleteSuccess', (deletedName) => {
+            document.getElementById('admin-msg').innerText = `✓ Deleted "${deletedName}"`;
+            socket.emit('adminGetUsers', { username: loggedInUser.username });
+        });
+
+        socket.on('adminError', (msg) => {
+            document.getElementById('admin-msg').innerText = '⚠️ ' + msg;
+        });
+
+        function syncProfile() {
+            if (!loggedInUser) return;
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const pData = stats[loggedInUser.username] || { mmr: 0, wins: 0, losses: 0 };
+            const money = parseInt(localStorage.getItem('dumpsterMoney')) || 0;
+            const inventory = JSON.parse(localStorage.getItem('dumpsterInventory')) || [];
+            const equippedCharm = localStorage.getItem('dumpsterEquippedCharm') || null;
+            socket.emit('saveProfile', {
+                username: loggedInUser.username,
+                money, mmr: pData.mmr || 0,
+                wins: pData.wins || 0,
+                losses: pData.losses || 0,
+                inventory, equippedCharm
+            });
+            loggedInUser = { ...loggedInUser, money, mmr: pData.mmr || 0, inventory, equippedCharm };
+        }
+
+        /* --- LOBBY LIST (multi-room browser) --- */
+        socket.on('lobbyList', (list) => {
+            const container = document.getElementById('lobby-list-container');
+            const countEl = document.getElementById('lobby-rooms-count');
+            if (!container) return;
+            countEl.innerText = `${list.length} / 5 lobbies active`;
+            if (list.length === 0) {
+                container.innerHTML = '<div id="lobby-empty-msg">No lobbies yet — be the first to create one!</div>';
+                return;
+            }
+            container.innerHTML = '';
+            list.forEach(room => {
+                const full = room.playerCount >= room.maxPlayers;
+                const started = room.gameStarted;
+                const disabled = full || started;
+                container.innerHTML += `
+                    <div class="lobby-list-item">
+                        <div class="lobby-list-info">
+                            <div class="lobby-list-name">${room.name}</div>
+                            <div class="lobby-list-meta">Host: ${room.hostName} &nbsp;·&nbsp; ${room.playerCount}/${room.maxPlayers} players</div>
+                            ${started ? '<div class="lobby-list-started">In Progress</div>' : ''}
+                        </div>
+                        <button class="lobby-join-btn" ${disabled ? 'disabled' : ''} onclick="openJoinRequest('${room.id}','${room.name}')">
+                            ${started ? 'Started' : fu... (68 KB left)
