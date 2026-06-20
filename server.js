@@ -25,7 +25,22 @@ app.post('/api/abandon-penalty', async (req, res) => {
   }
 });
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+/* --- RENDER DATABASE FIX --- */
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/dumpster_dice',
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+// Test the connection when the server boots up
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('Database connection failed. Is the DATABASE_URL correct?', err.stack);
+  } else {
+    console.log('✅ Successfully connected to the PostgreSQL database!');
+    release();
+  }
+});
+/* --------------------------- */
 
 const MAX_ROOMS = 5;
 const MAX_PLAYERS = 4;
@@ -314,4 +329,6 @@ io.on('connection', (socket) => {
   });
 });
 
-http.listen(5000, () => console.log('Server running on port 5000'));
+/* --- PORT FIX --- */
+const PORT = process.env.PORT || 5000;
+http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
