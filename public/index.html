@@ -689,6 +689,7 @@
             <button class="btn-large" onclick="startGame()">START GAME 🎲</button>
             <button class="btn-large" style="background: linear-gradient(180deg, #448AFF, #1565C0); border-color: #0D47A1; box-shadow: 0 6px 0 #0D47A1, 0 10px 20px rgba(0,0,0,0.5);" onclick="openLobby()">PLAY ONLINE 🌐</button>
             <button class="btn-large" id="admin-btn" style="display:none;" onclick="openAdmin()">ADMIN ⚙️</button>
+            <button class="btn-large btn-menu" style="font-size:16px;padding:10px 20px;" onclick="logoutDevice()">LOG OUT THIS DEVICE 🚪</button>
         </div>
 
         <div class="menu-panel" style="border-color: #8BC34A;">
@@ -813,6 +814,12 @@
         socket.on('connect', () => {
             mySocketId = socket.id;
             console.log('Connected to server:', socket.id);
+
+            const savedToken = localStorage.getItem('dumpsterSessionToken');
+            if (savedToken && !loggedInUser) {
+                setAuthMsg('Signing you in on this device…', false);
+                socket.emit('autoLogin', { sessionToken: savedToken });
+            }
         });
 
         /* --- AUTH HANDLERS --- */
@@ -841,6 +848,9 @@
 
         socket.on('authSuccess', (profile) => {
             loggedInUser = profile;
+            if (profile.sessionToken) {
+                localStorage.setItem('dumpsterSessionToken', profile.sessionToken);
+            }
             applyServerProfile(profile);
             document.getElementById('login-overlay').style.display = 'none';
             document.getElementById('main-menu').style.display = 'flex';
@@ -855,6 +865,21 @@
         socket.on('authError', (msg) => {
             setAuthMsg(msg);
         });
+
+        socket.on('autoLoginFailed', () => {
+            localStorage.removeItem('dumpsterSessionToken');
+            loggedInUser = null;
+            document.getElementById('login-overlay').style.display = 'flex';
+            setAuthMsg('Please sign in again.');
+        });
+
+        function logoutDevice() {
+            const username = loggedInUser ? loggedInUser.username : null;
+            localStorage.removeItem('dumpsterSessionToken');
+            if (username) socket.emit('logout', { username });
+            loggedInUser = null;
+            location.reload();
+        }
 
         function applyServerProfile(profile) {
             const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
