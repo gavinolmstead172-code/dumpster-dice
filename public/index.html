@@ -522,6 +522,34 @@
         .join-req-accept { flex:1; background: #8BC34A; border:none; color:#000; font-weight:900; font-size:14px; padding:8px; border-radius:8px; cursor:pointer; }
         .join-req-deny   { flex:1; background: #333; border: 1px solid #555; color:#ddd; font-weight:bold; font-size:14px; padding:8px; border-radius:8px; cursor:pointer; }
 
+
+        /* --- JUICE / QUALITY OF LIFE --- */
+        #toast-stack {
+            position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+            z-index: 12000; display: flex; flex-direction: column; gap: 10px;
+            pointer-events: none; width: min(92vw, 520px); align-items: center;
+        }
+        .game-toast {
+            background: rgba(15,15,15,0.96); border: 2px solid #8BC34A; color: #fff;
+            border-radius: 14px; padding: 12px 18px; font-size: 16px; font-weight: 900;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.75), 0 0 18px rgba(139,195,74,0.35);
+            animation: toastPop 0.25s ease, toastFade 0.35s ease 2.8s forwards;
+            text-shadow: 1px 1px 2px #000; text-align: center;
+        }
+        .game-toast.win { border-color: #FFD700; box-shadow: 0 10px 30px rgba(0,0,0,0.75), 0 0 24px rgba(255,215,0,0.65); }
+        .game-toast.lose { border-color: #FF5252; box-shadow: 0 10px 30px rgba(0,0,0,0.75), 0 0 24px rgba(255,82,82,0.55); }
+        .game-toast.out { border-color: #FF9800; box-shadow: 0 10px 30px rgba(0,0,0,0.75), 0 0 24px rgba(255,152,0,0.55); }
+        .game-toast.info { border-color: #448AFF; box-shadow: 0 10px 30px rgba(0,0,0,0.75), 0 0 24px rgba(68,138,255,0.45); }
+        @keyframes toastPop { from { transform: translateY(-12px) scale(0.92); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+        @keyframes toastFade { to { transform: translateY(-10px) scale(0.96); opacity: 0; } }
+        .player-box.just-out { animation: outBurst 0.9s ease; }
+        @keyframes outBurst {
+            0% { transform: scale(1); filter: none; }
+            35% { transform: scale(1.15) rotate(-2deg); filter: brightness(1.4); box-shadow: 0 0 25px #FF5252; }
+            100% { transform: scale(0.95); filter: grayscale(100%); }
+        }
+        .slot:hover { filter: brightness(1.25); transform: scale(1.08); }
+
     </style>
 </head>
 <body>
@@ -747,6 +775,7 @@
         </div>
     </div> 
     <div id="join-request-popup"></div>
+    <div id="toast-stack"></div>
 
     <div id="spinner-overlay">
         <div class="spinner-box" id="spinner-result">🎲</div>
@@ -816,7 +845,7 @@
             document.getElementById('login-overlay').style.display = 'none';
             document.getElementById('main-menu').style.display = 'flex';
             generateMenuRows();
-            loadStats(); loadEconomy(); renderChallenges(); checkRankUpStatus();
+            loadStats(); loadEconomy(); renderChallenges(); checkRankUpStatus(); refreshBackgroundMusic();
             if (profile.username === 'Bingle Berry') {
                 document.getElementById('admin-btn').style.display = 'inline-block';
             }
@@ -997,8 +1026,21 @@
             });
         });
 
-        socket.on('hostChanged', ({ newHostName }) => {
-            if (!isLobbyGame) addSystemChat(`👑 ${newHostName} is now the host`);
+        socket.on('hostChanged', ({ newHostName, reason } = {}) => {
+            // The game rule is now: if the original host leaves, the lobby closes instead of passing host.
+            const lobbyOpen = document.getElementById('lobby-overlay')?.style.display === 'flex';
+            if (myRoomId || lobbyOpen || isLobbyGame) {
+                const closedRoomId = myRoomId;
+                if (closedRoomId) {
+                    socket.emit('leaveLobby', { roomId: closedRoomId, reason: 'Host left the lobby', forceClose: true });
+                    socket.emit('closeLobby', { roomId: closedRoomId, reason: 'Host left the lobby' });
+                }
+                returnToMainMenuFromLobby(reason || 'Host left the lobby. Everyone was returned to the main menu.');
+                toast('⚠️ Host left — lobby closed.', 'lose');
+                if (sfxEnabled) sfxLose();
+                return;
+            }
+            addSystemChat(`👑 ${newHostName || 'A new player'} is now the host`);
         });
 
         socket.on('gameStarted', ({ gameMode: mode, humanPlayerMap }) => {
@@ -1010,6 +1052,7 @@
             isLobbyGame = true;
             document.getElementById('lobby-overlay').style.display = 'none';
             stopLobbyMusic();
+            if (musicEnabled) { initAudio(); startMusic(); }
             if (!amIHost) initGameAsClient(mode);
             showChatPanel();
         });
@@ -1018,6 +1061,8 @@
             if (!amIHost && gameActive) {
                 const btn = document.getElementById('roll-btn');
                 btn.disabled = false; btn.classList.add('human-turn');
+                if (sfxEnabled) sfxTurn();
+                toast("🎲 Your turn — roll it!", 'info');
                 logAction("🎲 It's YOUR turn! Click ROLL!");
             }
         });
@@ -1056,6 +1101,8 @@
             if (state.gameMode) gameMode = state.gameMode;
             render();
             if (!gameActive) {
+                const winner = players.find(p => p.dice > 0) || players[0];
+                playEndFeedback(winner);
                 document.getElementById('roll-btn').style.display = 'none';
                 document.getElementById('game-over-controls').style.display = 'block';
                 logAction(state.actionLog || 'Game over!');
@@ -1068,14 +1115,16 @@
             document.getElementById('lobby-browser-msg').innerText = msg;
         });
 
-        socket.on('lobbyClosed', ({ reason }) => {
+        socket.on('lobbyClosed', ({ reason } = {}) => {
             returnToMainMenuFromLobby(reason || 'The lobby was closed.');
-            alert(`⚠️ The lobby was closed: ${reason || 'Host left the lobby'}`);
+            toast(`⚠️ ${reason || 'Host left — lobby closed.'}`, 'lose');
+            if (sfxEnabled) sfxLose();
         });
 
         socket.on('hostLeft', ({ reason } = {}) => {
             returnToMainMenuFromLobby(reason || 'Host left the lobby.');
-            alert(`⚠️ ${reason || 'Host left the lobby. You were returned to the main menu.'}`);
+            toast(`⚠️ ${reason || 'Host left — lobby closed.'}`, 'lose');
+            if (sfxEnabled) sfxLose();
         });
 
         socket.on('chatMessage', ({ name, color, text }) => {
@@ -1240,7 +1289,14 @@
 
         window.addEventListener('beforeunload', () => {
             if (amIHost && myRoomId) {
+                // Emit both close and leave for compatibility with older server files.
                 socket.emit('closeLobby', { roomId: myRoomId, reason: 'Host left the lobby' });
+                socket.emit('leaveLobby', { roomId: myRoomId, reason: 'Host left the lobby', closeIfHost: true });
+                try {
+                    navigator.sendBeacon('/api/close-lobby',
+                        new Blob([JSON.stringify({ roomId: myRoomId, reason: 'Host left the lobby' })], { type: 'application/json' })
+                    );
+                } catch (e) {}
             }
             if (gameActive && loggedInUser) {
                 navigator.sendBeacon('/api/abandon-penalty',
@@ -1582,15 +1638,7 @@
         function toggleMusic() {
             musicEnabled = !musicEnabled;
             soundEnabled = musicEnabled || sfxEnabled;
-            if (musicEnabled) {
-                initAudio();
-                const lobbyVisible = document.getElementById('lobby-overlay')?.style.display === 'flex';
-                if (lobbyVisible && !gameActive) startLobbyMusic();
-                else startMusic();
-            } else {
-                stopMusic();
-                stopLobbyMusic();
-            }
+            refreshBackgroundMusic();
             updateAudioBtnLabels();
         }
 
@@ -1618,6 +1666,10 @@
         function sfxClaim() { playTone(600, 'sine', 0.1, 0.1); setTimeout(() => playTone(900, 'sine', 0.2, 0.1), 100); }
         function sfxPotWin() { playTone(400, 'square', 0.1, 0.1); setTimeout(()=>playTone(500, 'square', 0.1, 0.1), 150); setTimeout(()=>playTone(600, 'square', 0.1, 0.1), 300); setTimeout(()=>playTone(800, 'square', 0.4, 0.15), 450); }
         function sfxGameOver() { playTone(500, 'sine', 0.2, 0.1); setTimeout(()=>playTone(600, 'sine', 0.2, 0.1), 200); setTimeout(()=>playTone(700, 'sine', 0.2, 0.1), 400); setTimeout(()=>playTone(1000, 'sine', 0.8, 0.2), 600); }
+        function sfxWin() { playTone(523, 'triangle', 0.12, 0.13); setTimeout(()=>playTone(659, 'triangle', 0.12, 0.13), 120); setTimeout(()=>playTone(784, 'triangle', 0.18, 0.16), 240); setTimeout(()=>playTone(1046, 'sine', 0.55, 0.18), 420); }
+        function sfxLose() { playTone(330, 'sawtooth', 0.18, 0.10); setTimeout(()=>playTone(247, 'sawtooth', 0.22, 0.11), 170); setTimeout(()=>playTone(165, 'sawtooth', 0.45, 0.13), 360); }
+        function sfxOut() { playTone(180, 'square', 0.12, 0.11); setTimeout(()=>playTone(95, 'sawtooth', 0.35, 0.15), 130); }
+        function sfxTurn() { playTone(740, 'sine', 0.08, 0.07); setTimeout(()=>playTone(980, 'sine', 0.08, 0.07), 90); }
 
         function startMusic() {
             if (!musicEnabled || !audioCtx) return;
@@ -1638,14 +1690,16 @@
         function stopMusic() { clearInterval(musicInterval); musicInterval = null; }
 
         function startLobbyMusic() {
+            // Chill menu/lobby loop. It now plays on the main menu AND every lobby screen.
             if (!musicEnabled || !audioCtx) return;
+            if (lobbyMusicInterval) return;
             stopMusic();
-            stopLobbyMusic();
-            const lobbyNotes = [330, 392, 494, 392, 330, 294, 330, 392];
-            lobbyMusicInterval = setInterval(() => {
+            const lobbyNotes = [330, 392, 494, 392, 330, 294, 330, 392, 440, 392];
+            const playLobbyNote = () => {
                 if (!musicEnabled) { stopLobbyMusic(); return; }
                 const overlayVisible = document.getElementById('lobby-overlay')?.style.display === 'flex';
-                if (!overlayVisible || gameActive) { stopLobbyMusic(); return; }
+                const menuVisible = document.getElementById('main-menu')?.style.display === 'flex';
+                if ((!overlayVisible && !menuVisible) || gameActive) { stopLobbyMusic(); return; }
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
@@ -1657,10 +1711,33 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.35);
                 currentLobbyNote = (currentLobbyNote + 1) % lobbyNotes.length;
-            }, 420);
+            };
+            playLobbyNote();
+            lobbyMusicInterval = setInterval(playLobbyNote, 420);
         }
 
         function stopLobbyMusic() { clearInterval(lobbyMusicInterval); lobbyMusicInterval = null; }
+
+        function refreshBackgroundMusic() {
+            if (!musicEnabled) { stopMusic(); stopLobbyMusic(); return; }
+            initAudio();
+            const menuVisible = document.getElementById('main-menu')?.style.display === 'flex';
+            const lobbyVisible = document.getElementById('lobby-overlay')?.style.display === 'flex';
+            const gameVisible = document.getElementById('game-ui')?.style.display === 'block';
+            if (gameActive || gameVisible) startMusic();
+            else if (menuVisible || lobbyVisible) startLobbyMusic();
+            else { stopMusic(); stopLobbyMusic(); }
+        }
+
+        function toast(msg, type = 'info') {
+            const stack = document.getElementById('toast-stack');
+            if (!stack) return;
+            const div = document.createElement('div');
+            div.className = `game-toast ${type}`;
+            div.innerText = msg;
+            stack.appendChild(div);
+            setTimeout(() => div.remove(), 3400);
+        }
 
         /* --- MENU LOGIC --- */
         const defaultColors = ['#FF5252', '#448AFF', '#69F0AE', '#FFD740'];
@@ -1736,6 +1813,7 @@
             LOBBY_SCREENS.forEach(s => {
                 document.getElementById(s).style.display = s === id ? 'block' : 'none';
             });
+            refreshBackgroundMusic();
         }
 
         function lockLobbyNameInputs() {
@@ -1756,12 +1834,12 @@
             showLobbyScreen('lobby-browser-screen');
             document.getElementById('lobby-browser-msg').innerText = '';
             lockLobbyNameInputs();
-            if (musicEnabled) { initAudio(); startLobbyMusic(); }
+            refreshBackgroundMusic();
         }
 
         function closeLobby() {
             document.getElementById('lobby-overlay').style.display = 'none';
-            stopLobbyMusic();
+            refreshBackgroundMusic();
         }
 
         function doCreateLobby() {
@@ -1817,6 +1895,7 @@
             loadStats();
             loadEconomy();
             renderChallenges();
+            refreshBackgroundMusic();
             if (message) {
                 const log = document.getElementById('action-log');
                 if (log) log.innerText = message;
@@ -1830,6 +1909,7 @@
             if (leavingRoomId) {
                 if (wasHost) {
                     socket.emit('closeLobby', { roomId: leavingRoomId, reason: 'Host left the lobby' });
+                    socket.emit('leaveLobby', { roomId: leavingRoomId, reason: 'Host left the lobby', closeIfHost: true });
                 } else {
                     socket.emit('leaveLobby', { roomId: leavingRoomId });
                 }
@@ -1921,6 +2001,7 @@
             if (wasLobbyGame && leavingRoomId) {
                 if (wasHost) {
                     socket.emit('closeLobby', { roomId: leavingRoomId, reason: 'Host left the lobby' });
+                    socket.emit('leaveLobby', { roomId: leavingRoomId, reason: 'Host left the lobby', closeIfHost: true });
                 } else {
                     socket.emit('leaveLobby', { roomId: leavingRoomId });
                 }
@@ -1933,7 +2014,7 @@
             document.getElementById('spinner-overlay').style.display = 'none';
             document.getElementById('main-menu').style.display = 'flex';
             document.getElementById('chat-panel').style.display = 'none';
-            stopMusic(); stopLobbyMusic(); loadStats(); loadEconomy(); renderChallenges();
+            loadStats(); loadEconomy(); renderChallenges(); refreshBackgroundMusic();
         }
         function playAgain() { startGame(); }
 
@@ -1941,10 +2022,14 @@
         let players = []; let currentPlayer = 0; let sharedBoard = [null, null, null, null, null, null]; 
         let dumpsterTotal = 0; let gameActive = false; let isProcessing = true; let gameMode = 'basic'; let playerCheatChance = 0; 
         let dashBotIntervals = []; let dashHesitationInterval = null; let lastHumanRollTime = 0;
+        let outNotifiedPlayers = new Set();
+        let gameOverAnnounced = false;
 
         function startGame() {
             gameMode = document.getElementById('game-mode-select').value;
             if (musicEnabled || sfxEnabled) { initAudio(); if (musicEnabled) startMusic(); }
+            outNotifiedPlayers = new Set();
+            gameOverAnnounced = false;
             clearDashBots();
             
             const count = parseInt(document.getElementById('player-count-select').value);
@@ -2055,12 +2140,16 @@
             for (let i = 0; i < 6; i++) {
                 let owner = sharedBoard[i]; let div = document.createElement("div");
                 div.className = `slot ${owner !== null ? 'filled owner-' + owner : ''}`; div.innerText = i + 1; 
+                div.title = owner === null ? `Slot ${i + 1}: empty` : `Slot ${i + 1}: claimed by ${players[owner]?.name || 'Unknown'}`;
                 if(owner === null) { div.style.color = "#777"; div.style.borderColor = "#555"; }
                 boardEl.appendChild(div);
             }
 
             document.getElementById('dumpster-count').innerText = dumpsterTotal;
             const container = document.getElementById('game-container'); container.innerHTML = "";
+
+            if (gameActive && players[currentPlayer]) document.title = `Dumpster Dice — ${players[currentPlayer].name}'s turn`;
+            else document.title = 'Dumpster Dice - Deluxe Arcade Edition';
 
             players.forEach((p, index) => {
                 const pBox = document.createElement("div");
@@ -2241,6 +2330,7 @@
                 }
 
                 render();
+                notifyOutPlayers();
                 if (boardFilled) setTimeout(() => evaluateBoard(actingPlayerId, callback), 400);
                 else { checkGameOver(); if(callback && gameActive) callback(); }
             }, (gameMode === 'dash') ? 200 : 500); 
@@ -2250,6 +2340,44 @@
 
         function passTurn() { let attempts = 0; do { currentPlayer = (currentPlayer + 1) % players.length; attempts++; } while (players[currentPlayer].dice <= 0 && attempts < players.length); }
 
+        function getLocalHumanPlayer() {
+            if (isLobbyGame && myPlayerIndex >= 0 && players[myPlayerIndex]) return players[myPlayerIndex];
+            return players.find(p => !p.isBot) || null;
+        }
+
+        function notifyOutPlayers() {
+            if (!gameActive) return;
+            players.forEach(p => {
+                if (p.dice <= 0 && !outNotifiedPlayers.has(p.id)) {
+                    outNotifiedPlayers.add(p.id);
+                    const local = getLocalHumanPlayer();
+                    const isYou = local && local.id === p.id;
+                    toast(isYou ? '💀 You are OUT!' : `💀 ${p.name} is out!`, 'out');
+                    if (sfxEnabled) sfxOut();
+                    const boxes = document.querySelectorAll('.player-box');
+                    if (boxes[p.id]) {
+                        boxes[p.id].classList.add('just-out');
+                        setTimeout(() => boxes[p.id]?.classList.remove('just-out'), 950);
+                    }
+                }
+            });
+        }
+
+        function playEndFeedback(winner) {
+            if (gameOverAnnounced) return;
+            gameOverAnnounced = true;
+            const local = getLocalHumanPlayer();
+            if (!local) { if (sfxEnabled) sfxGameOver(); return; }
+            const didWin = winner && winner.id === local.id;
+            if (didWin) {
+                if (sfxEnabled) sfxWin();
+                toast(`🏆 YOU WON! ${winner.name} takes the trash crown!`, 'win');
+            } else {
+                if (sfxEnabled) sfxLose();
+                toast(`💀 You lost! ${winner ? winner.name : 'Someone'} won this round.`, 'lose');
+            }
+        }
+
         let activeWinStreak = 0; let isDoubleOrNothing = false; let pendingDonRewards = { money: 0, mmr: 0 };
 
         function checkGameOver() {
@@ -2257,7 +2385,8 @@
             if (activePlayers.length === 1 || activePlayers.length === 0) {
                 clearDashBots();
                 let overallWinner = activePlayers.length === 1 ? activePlayers[0] : players[0]; 
-                gameActive = false; sfxGameOver();
+                gameActive = false;
+                playEndFeedback(overallWinner);
                 logAction(`🏆 GAME OVER! ${overallWinner.name} wins!`);
                 render(overallWinner.id); updateControls(); stopMusic();
                 
@@ -2356,7 +2485,7 @@
             }, 3000);
         }
 
-        generateMenuRows(); updateRulesDisplay(); loadStats(); loadEconomy(); initChallenges();
+        generateMenuRows(); updateRulesDisplay(); loadStats(); loadEconomy(); initChallenges(); updateAudioBtnLabels();
     
     </script>
 </body>
