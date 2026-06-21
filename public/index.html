@@ -179,11 +179,34 @@
         }
         .wallet { font-size: 24px; font-weight: bold; color: #FFD700; }
         
-        .shop-cases { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
+        .shop-cases {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
         
         .case-btn {
-            flex: 1; padding: 15px 5px; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer;
-            border: 2px solid #555; transition: 0.2s; color: white; text-shadow: 1px 1px 2px #000; position: relative;
+            width: 100%;
+            min-width: 0;
+            padding: 13px 6px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 15px;
+            line-height: 1.15;
+            cursor: pointer;
+            border: 2px solid #555;
+            transition: 0.2s;
+            color: white;
+            text-shadow: 1px 1px 2px #000;
+            position: relative;
+            box-sizing: border-box;
+        }
+        @media (max-width: 520px) {
+            .shop-cases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .case-btn { font-size: 14px; padding: 12px 4px; }
         }
         
         .case-btn:hover { filter: brightness(1.2); }
@@ -195,7 +218,7 @@
         .case-tooltip {
             visibility: hidden; position: absolute; bottom: 115%; left: 50%; transform: translateX(-50%);
             background: rgba(17, 17, 17, 0.95); color: #fff; padding: 12px; border-radius: 8px; border: 2px solid #555;
-            width: max-content; font-size: 14px; text-align: left; opacity: 0; transition: opacity 0.2s; z-index: 100;
+            width: max-content; max-width: min(280px, 80vw); font-size: 14px; text-align: left; opacity: 0; transition: opacity 0.2s; z-index: 100;
             pointer-events: none; box-shadow: 0 8px 20px rgba(0,0,0,0.8); line-height: 1.5; text-shadow: none;
         }
         .case-btn:hover .case-tooltip { visibility: visible; opacity: 1; }
@@ -261,7 +284,7 @@
 
         #game-ui { display: none; }
 
-        .in-game-header { display: flex; justify-content: space-between; max-width: 600px; margin: 0 auto 15px auto; }
+        .in-game-header { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; max-width: 760px; margin: 0 auto 15px auto; }
         .header-btn { background: #444; border: 2px solid #666; color: white; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
         .header-btn:hover { background: #555; }
         .header-btn.on { background: #FF9800; border-color: #E65100; }
@@ -622,7 +645,7 @@
         .wear-ft { filter: saturate(0.95); }
         .wear-ww { filter: saturate(0.8) brightness(0.9); }
         .wear-bs { filter: grayscale(0.25) brightness(0.82); }
-        #trade-btn { background: linear-gradient(180deg,#00E5FF,#0277BD); border-color:#01579B; }
+        #trade-btn, .trade-shop-btn { background: linear-gradient(180deg,#00E5FF,#0277BD); border-color:#01579B; }
         #trade-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.93); z-index: 9500; display: none;
             align-items: center; justify-content: center; padding: 20px; box-sizing: border-box;
@@ -859,6 +882,7 @@
 
             <h3 style="margin-bottom: 10px; color: #ddd; text-align: left;">Your Charms</h3>
             <div class="inventory-grid" id="inventory-grid"></div>
+            <button class="btn-large trade-shop-btn" style="width:100%;margin-top:14px;font-size:18px;padding:12px 18px;box-shadow:0 6px 0 #01579B,0 10px 20px rgba(0,0,0,0.5);" onclick="openTradeMenu()">TRADE CHARMS 🔁</button>
             <div id="shop-message" style="height: 20px; margin-top: 10px; font-weight: bold; color: #8BC34A;"></div>
         </div>
 
