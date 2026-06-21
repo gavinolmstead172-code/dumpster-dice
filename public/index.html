@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -550,6 +549,7 @@
             <h2>⚙️ ADMIN PANEL</h2>
             <p>Logged in as Bingle Berry — full account control</p>
             <div id="admin-msg"></div>
+            <button class="btn-large" id="admin-god-btn" style="width:100%;margin:10px 0 18px 0;background:linear-gradient(180deg,#FFD740,#FF9800);border-color:#E65100;box-shadow:0 6px 0 #BF360C,0 10px 20px rgba(0,0,0,0.5);" onclick="adminActivateGodMode()">✨ ACTIVATE GOD MODE</button>
             <div id="admin-user-list"><div style="color:#666;">Loading...</div></div>
             <br>
             <button class="lobby-back-btn" onclick="closeAdmin()">← Close</button>
@@ -1009,6 +1009,7 @@
             }
             isLobbyGame = true;
             document.getElementById('lobby-overlay').style.display = 'none';
+            stopLobbyMusic();
             if (!amIHost) initGameAsClient(mode);
             showChatPanel();
         });
@@ -1068,20 +1069,13 @@
         });
 
         socket.on('lobbyClosed', ({ reason }) => {
-            isLobbyGame = false; amIHost = false; isWaitingForExternalRoll = false;
-            myPlayerIndex = -1; clientHumanPlayerMap = {}; lastTurnNotified = -1;
-            if (gameActive) {
-                gameActive = false; isProcessing = false; clearDashBots(); stopMusic();
-                document.getElementById('game-ui').style.display = 'none';
-                document.getElementById('spinner-overlay').style.display = 'none';
-                document.getElementById('chat-panel').style.display = 'none';
-                document.getElementById('main-menu').style.display = 'flex';
-                loadStats(); loadEconomy(); renderChallenges();
-                alert(`⚠️ The lobby was closed: ${reason}`);
-            } else {
-                document.getElementById('lobby-overlay').style.display = 'none';
-                document.getElementById('chat-panel').style.display = 'none';
-            }
+            returnToMainMenuFromLobby(reason || 'The lobby was closed.');
+            alert(`⚠️ The lobby was closed: ${reason || 'Host left the lobby'}`);
+        });
+
+        socket.on('hostLeft', ({ reason } = {}) => {
+            returnToMainMenuFromLobby(reason || 'Host left the lobby.');
+            alert(`⚠️ ${reason || 'Host left the lobby. You were returned to the main menu.'}`);
         });
 
         socket.on('chatMessage', ({ name, color, text }) => {
@@ -1208,7 +1202,6 @@
         });
 
         /* --- CHEAT CODE SYSTEM --- */
-        let secretBuffer = "";
         let secretMrkBuffer = "";
         let secretResetBuffer = "";
         let godMode = false;
@@ -1216,16 +1209,6 @@
         document.addEventListener('keydown', (e) => {
             // Prevent triggers if user is typing inside an input field (like a player name)
             if (e.target.tagName.toLowerCase() === 'input') return;
-
-            // "5708" God Mode
-            if (!isNaN(e.key) && e.key.trim() !== '') {
-                secretBuffer += e.key;
-                if (secretBuffer.length > 4) secretBuffer = secretBuffer.slice(-4);
-                if (secretBuffer === "5708") {
-                    activateGodMode();
-                    secretBuffer = ""; 
-                }
-            }
 
             // Letter-based codes ("mrk" and "reset")
             if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
@@ -1256,12 +1239,26 @@
         });
 
         window.addEventListener('beforeunload', () => {
+            if (amIHost && myRoomId) {
+                socket.emit('closeLobby', { roomId: myRoomId, reason: 'Host left the lobby' });
+            }
             if (gameActive && loggedInUser) {
                 navigator.sendBeacon('/api/abandon-penalty',
                     new Blob([JSON.stringify({ username: loggedInUser.username })], { type: 'application/json' })
                 );
             }
         });
+
+        function adminActivateGodMode() {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') {
+                const msg = document.getElementById('admin-msg');
+                if (msg) msg.innerText = '⚠️ God Mode is admin-only.';
+                return;
+            }
+            activateGodMode();
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = '✨ God Mode activated.';
+        }
 
         function activateGodMode() {
             if (godMode) return; 
@@ -1563,6 +1560,7 @@
 
         /* --- AUDIO SYSTEM --- */
         let audioCtx; let musicEnabled = false; let sfxEnabled = false; let musicInterval; let currentNote = 0;
+        let lobbyMusicInterval = null; let currentLobbyNote = 0;
         let soundEnabled = false;
 
         function initAudio() {
@@ -1584,7 +1582,15 @@
         function toggleMusic() {
             musicEnabled = !musicEnabled;
             soundEnabled = musicEnabled || sfxEnabled;
-            if (musicEnabled) { initAudio(); startMusic(); } else { stopMusic(); }
+            if (musicEnabled) {
+                initAudio();
+                const lobbyVisible = document.getElementById('lobby-overlay')?.style.display === 'flex';
+                if (lobbyVisible && !gameActive) startLobbyMusic();
+                else startMusic();
+            } else {
+                stopMusic();
+                stopLobbyMusic();
+            }
             updateAudioBtnLabels();
         }
 
@@ -1615,6 +1621,7 @@
 
         function startMusic() {
             if (!musicEnabled || !audioCtx) return;
+            stopLobbyMusic();
             stopMusic();
             const notes = [150, 150, 200, 150, 220, 150, 180, 150];
             musicInterval = setInterval(() => {
@@ -1628,7 +1635,32 @@
                 currentNote = (currentNote + 1) % notes.length;
             }, (gameMode === 'dash') ? 150 : 250); 
         }
-        function stopMusic() { clearInterval(musicInterval); }
+        function stopMusic() { clearInterval(musicInterval); musicInterval = null; }
+
+        function startLobbyMusic() {
+            if (!musicEnabled || !audioCtx) return;
+            stopMusic();
+            stopLobbyMusic();
+            const lobbyNotes = [330, 392, 494, 392, 330, 294, 330, 392];
+            lobbyMusicInterval = setInterval(() => {
+                if (!musicEnabled) { stopLobbyMusic(); return; }
+                const overlayVisible = document.getElementById('lobby-overlay')?.style.display === 'flex';
+                if (!overlayVisible || gameActive) { stopLobbyMusic(); return; }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(lobbyNotes[currentLobbyNote], audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.35);
+                currentLobbyNote = (currentLobbyNote + 1) % lobbyNotes.length;
+            }, 420);
+        }
+
+        function stopLobbyMusic() { clearInterval(lobbyMusicInterval); lobbyMusicInterval = null; }
 
         /* --- MENU LOGIC --- */
         const defaultColors = ['#FF5252', '#448AFF', '#69F0AE', '#FFD740'];
@@ -1724,10 +1756,12 @@
             showLobbyScreen('lobby-browser-screen');
             document.getElementById('lobby-browser-msg').innerText = '';
             lockLobbyNameInputs();
+            if (musicEnabled) { initAudio(); startLobbyMusic(); }
         }
 
         function closeLobby() {
             document.getElementById('lobby-overlay').style.display = 'none';
+            stopLobbyMusic();
         }
 
         function doCreateLobby() {
@@ -1760,12 +1794,51 @@
             showLobbyScreen('lobby-browser-screen');
         }
 
+        function returnToMainMenuFromLobby(message = null) {
+            isLobbyGame = false;
+            amIHost = false;
+            isWaitingForExternalRoll = false;
+            myPlayerIndex = -1;
+            clientHumanPlayerMap = {};
+            lastTurnNotified = -1;
+            myRoomId = null;
+            pendingJoinRoomId = null;
+            lobbyPlayerList = [];
+            gameActive = false;
+            isProcessing = false;
+            clearDashBots();
+            stopMusic();
+            stopLobbyMusic();
+            document.getElementById('lobby-overlay').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'none';
+            document.getElementById('spinner-overlay').style.display = 'none';
+            document.getElementById('chat-panel').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'flex';
+            loadStats();
+            loadEconomy();
+            renderChallenges();
+            if (message) {
+                const log = document.getElementById('action-log');
+                if (log) log.innerText = message;
+            }
+        }
+
         function leaveLobby() {
+            const leavingRoomId = myRoomId;
+            const wasHost = amIHost;
+
+            if (leavingRoomId) {
+                if (wasHost) {
+                    socket.emit('closeLobby', { roomId: leavingRoomId, reason: 'Host left the lobby' });
+                } else {
+                    socket.emit('leaveLobby', { roomId: leavingRoomId });
+                }
+            }
+
             myRoomId = null;
             amIHost = false;
             lobbyPlayerList = [];
-            socket.emit('getLobbyList');
-            showLobbyScreen('lobby-browser-screen');
+            returnToMainMenuFromLobby(wasHost ? 'Host left the lobby.' : null);
         }
 
         function respondToJoin(roomId, socketId, approve) {
@@ -1801,6 +1874,7 @@
             }
             const mode = document.getElementById('game-mode-select').value;
             socket.emit('startGame', { gameMode: mode, humanPlayerMap });
+            stopLobbyMusic();
             startGame();
         }
 
@@ -1835,18 +1909,31 @@
         }
 
         function goToMainMenu() {
+            const leavingRoomId = myRoomId;
+            const wasHost = amIHost;
+            const wasLobbyGame = isLobbyGame;
+
             if (gameActive && loggedInUser) {
                 if (!confirm('⚠️ Leaving mid-game will deduct -25 ranked MMR as an abandonment penalty.\n\nAre you sure you want to quit?')) return;
                 applyAbandonPenalty();
             }
+
+            if (wasLobbyGame && leavingRoomId) {
+                if (wasHost) {
+                    socket.emit('closeLobby', { roomId: leavingRoomId, reason: 'Host left the lobby' });
+                } else {
+                    socket.emit('leaveLobby', { roomId: leavingRoomId });
+                }
+            }
+
             gameActive = false; isProcessing = false; clearDashBots();
             isLobbyGame = false; amIHost = false; isWaitingForExternalRoll = false;
-            myPlayerIndex = -1; clientHumanPlayerMap = {}; lastTurnNotified = -1;
+            myPlayerIndex = -1; clientHumanPlayerMap = {}; lastTurnNotified = -1; myRoomId = null;
             document.getElementById('game-ui').style.display = 'none';
             document.getElementById('spinner-overlay').style.display = 'none';
             document.getElementById('main-menu').style.display = 'flex';
             document.getElementById('chat-panel').style.display = 'none';
-            stopMusic(); loadStats(); loadEconomy(); renderChallenges();
+            stopMusic(); stopLobbyMusic(); loadStats(); loadEconomy(); renderChallenges();
         }
         function playAgain() { startGame(); }
 
