@@ -571,6 +571,22 @@
         }
         .admin-reset-btn:hover { background: #FFD740; }
         .admin-action-row { display: flex; gap: 8px; align-items: center; }
+        #god-mode-menu { display: none; background: #0f0f0f; border: 3px solid #FFD740; border-radius: 16px; padding: 16px; margin: 0 0 18px 0; box-shadow: inset 0 0 18px rgba(255,215,0,0.08), 0 0 20px rgba(255,215,0,0.18); text-align: left; }
+        #god-mode-menu.open { display: block; animation: tauntPop 0.18s ease; }
+        .god-menu-title { color: #FFD740; font-size: 18px; font-weight: 1000; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; text-align: center; }
+        .god-menu-section { background: #151515; border: 1px solid #333; border-radius: 12px; padding: 12px; margin: 10px 0; }
+        .god-menu-section h3 { margin: 0 0 8px 0; color: #fff; font-size: 15px; }
+        .god-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+        .god-row label { color: #bbb; font-size: 13px; font-weight: 900; }
+        .god-input { flex: 1; min-width: 120px; background: #111; color: #fff; border: 2px solid #444; border-radius: 8px; padding: 9px 10px; font-weight: 900; }
+        .god-btn { background: #333; border: 2px solid #555; color: #fff; font-weight: 900; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+        .god-btn:hover { filter: brightness(1.2); }
+        .god-btn.on { background: linear-gradient(180deg,#8BC34A,#558B2F); border-color: #33691E; color: #fff; }
+        .god-btn.danger { background: #B71C1C; border-color: #7f0000; }
+        .god-charm-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; }
+        .god-charm-pill { display: flex; align-items: center; gap: 6px; background: #222; border: 2px solid #555; border-radius: 999px; padding: 6px 8px; font-size: 22px; }
+        .god-charm-remove { background: #FF5252; color: #fff; border: none; border-radius: 999px; width: 22px; height: 22px; font-weight: 1000; cursor: pointer; line-height: 20px; }
+        .god-stat { color: #aaa; font-size: 12px; margin-top: 6px; text-align: center; }
         .taunt-option {
             width: 100%; background: #191919; border: 2px solid #333; color: #fff; border-radius: 10px;
             padding: 10px 12px; margin: 5px 0; text-align: left; font-weight: 900; cursor: pointer;
@@ -620,7 +636,33 @@
             <h2>⚙️ ADMIN PANEL</h2>
             <p>Logged in as Bingle Berry — full account control</p>
             <div id="admin-msg"></div>
-            <button class="btn-large" id="admin-god-btn" style="width:100%;margin:10px 0 18px 0;background:linear-gradient(180deg,#FFD740,#FF9800);border-color:#E65100;box-shadow:0 6px 0 #BF360C,0 10px 20px rgba(0,0,0,0.5);" onclick="adminActivateGodMode()">✨ ACTIVATE GOD MODE</button>
+            <button class="btn-large" id="admin-god-btn" style="width:100%;margin:10px 0 12px 0;background:linear-gradient(180deg,#FFD740,#FF9800);border-color:#E65100;box-shadow:0 6px 0 #BF360C,0 10px 20px rgba(0,0,0,0.5);" onclick="openGodModeMenu()">✨ GOD MODE MENU</button>
+            <div id="god-mode-menu">
+                <div class="god-menu-title">✨ God Mode Controls</div>
+                <div class="god-menu-section">
+                    <h3>Power Toggle</h3>
+                    <div class="god-row">
+                        <button class="god-btn" id="god-toggle-btn" onclick="toggleGodModeFromMenu()">God Mode: OFF</button>
+                        <button class="god-btn" onclick="godUnlockAllCharms()">Unlock All Charms</button>
+                    </div>
+                    <div class="god-stat" id="god-rig-info">Bot-game boost: loading…</div>
+                </div>
+                <div class="god-menu-section">
+                    <h3>Money</h3>
+                    <div class="god-row">
+                        <label for="god-money-input">Set Money:</label>
+                        <input class="god-input" id="god-money-input" type="number" min="0" step="1" value="0">
+                        <button class="god-btn on" onclick="godApplyMoney()">Apply</button>
+                    </div>
+                </div>
+                <div class="god-menu-section">
+                    <h3>Your Charms</h3>
+                    <div class="god-charm-list" id="god-charm-list"></div>
+                    <div class="god-row">
+                        <button class="god-btn danger" onclick="godClearCharms()">Remove All Charms</button>
+                    </div>
+                </div>
+            </div>
             <button class="btn-large" id="admin-reset-all-btn" style="width:100%;margin:0 0 18px 0;background:linear-gradient(180deg,#FF5252,#B71C1C);border-color:#7f0000;box-shadow:0 6px 0 #4a0000,0 10px 20px rgba(0,0,0,0.5);" onclick="adminResetAllPlayers()">🧨 RESET ALL PLAYERS</button>
             <div id="admin-user-list"><div style="color:#666;">Loading...</div></div>
             <br>
@@ -1422,36 +1464,164 @@
             }
         });
 
-        function adminActivateGodMode() {
+        function getAllGameCharms() {
+            let allCharms = [];
+            if (typeof cases !== 'undefined') {
+                for (let cost in cases) {
+                    allCharms.push(cases[cost].chase);
+                    cases[cost].pool.forEach(item => allCharms.push(item.c));
+                }
+            }
+            allCharms.push('🤖');
+            return [...new Set(allCharms)];
+        }
+
+        function getRiggedChanceForMmr(mmr) {
+            const rank = getRank(mmr || 0);
+            const chances = [0.90, 0.70, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00];
+            return chances[rank.index] ?? 0;
+        }
+
+        function getCurrentUserMmr() {
+            if (!loggedInUser) return 0;
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const pData = stats[loggedInUser.username];
+            return pData ? (pData.mmr || (typeof pData === 'number' ? pData * 35 : 0)) : (loggedInUser.mmr || 0);
+        }
+
+        function computeCurrentBotOnlyCheatChance() {
+            if (!players || players.length === 0) return 0;
+            const humanPlayers = players.filter(p => !p.isBot);
+            if (humanPlayers.length !== 1 || !players.some(p => p.isBot)) return 0;
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const humanName = humanPlayers[0].name;
+            const pData = stats[humanName];
+            const mmr = pData ? (pData.mmr || (typeof pData === 'number' ? pData * 35 : 0)) : 0;
+            return getRiggedChanceForMmr(mmr);
+        }
+
+        function openGodModeMenu() {
             if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') {
                 const msg = document.getElementById('admin-msg');
-                if (msg) msg.innerText = '⚠️ God Mode is admin-only.';
+                if (msg) msg.innerText = '⚠️ God Mode menu is admin-only.';
                 return;
             }
-            activateGodMode();
+            const menu = document.getElementById('god-mode-menu');
+            if (!menu) return;
+            menu.classList.toggle('open');
+            renderGodModeMenu();
+        }
+
+        function renderGodModeMenu() {
+            const toggleBtn = document.getElementById('god-toggle-btn');
+            if (toggleBtn) {
+                toggleBtn.innerText = godMode ? 'God Mode: ON' : 'God Mode: OFF';
+                toggleBtn.classList.toggle('on', !!godMode);
+            }
+
+            const moneyInput = document.getElementById('god-money-input');
+            if (moneyInput) moneyInput.value = playerMoney || 0;
+
+            const mmr = getCurrentUserMmr();
+            const rank = getRank(mmr);
+            const chance = getRiggedChanceForMmr(mmr);
+            const info = document.getElementById('god-rig-info');
+            if (info) info.innerText = `Current rank: ${rank.name} • Bot-only winning-number boost: ${Math.round(chance * 100)}% extra`;
+
+            const list = document.getElementById('god-charm-list');
+            if (!list) return;
+            list.innerHTML = '';
+            if (!playerInventory || playerInventory.length === 0) {
+                list.innerHTML = '<div style="color:#777;font-size:13px;padding:8px 0;">No charms owned.</div>';
+                return;
+            }
+            playerInventory.forEach((charm, index) => {
+                const pill = document.createElement('div');
+                pill.className = 'god-charm-pill';
+                pill.innerHTML = `<span>${charm}</span><button class="god-charm-remove" title="Remove" onclick="godRemoveCharm(${index})">×</button>`;
+                list.appendChild(pill);
+            });
+        }
+
+        function toggleGodModeFromMenu() {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
+            godMode = !godMode;
+
+            if (godMode) {
+                playerCheatChance = 1.0;
+                if (gameActive && Array.isArray(players)) {
+                    players.forEach(p => {
+                        if (p.isBot) p.dice = Math.min(p.dice, 1);
+                        else p.dice = Math.max(p.dice, 999);
+                    });
+                    render();
+                    updateControls();
+                }
+            } else {
+                playerCheatChance = computeCurrentBotOnlyCheatChance();
+            }
+
             const msg = document.getElementById('admin-msg');
-            if (msg) msg.innerText = '✨ God Mode activated.';
+            if (msg) msg.innerText = godMode ? '✨ God Mode enabled.' : 'God Mode disabled.';
+            if (typeof toast === 'function') toast(godMode ? '✨ God Mode ON' : 'God Mode OFF', godMode ? 'win' : 'info');
+            if (sfxEnabled && godMode) sfxPotWin();
+            renderGodModeMenu();
         }
 
         function activateGodMode() {
-            if (godMode) return; 
-            godMode = true;
-            playerCheatChance = 1.0; 
-            
-            let allCharms = [];
-            for (let cost in cases) {
-                allCharms.push(cases[cost].chase);
-                cases[cost].pool.forEach(item => allCharms.push(item.c)); 
-            }
-            
-            allCharms.forEach(charm => { if (!playerInventory.includes(charm)) playerInventory.push(charm); });
-            if (!playerInventory.includes('🤖')) playerInventory.push('🤖');
+            if (!godMode) toggleGodModeFromMenu();
+        }
 
+        function godApplyMoney() {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
+            const input = document.getElementById('god-money-input');
+            const amount = Math.max(0, Math.floor(Number(input ? input.value : 0) || 0));
+            playerMoney = amount;
+            localStorage.setItem('dumpsterMoney', playerMoney);
             saveEconomy();
-            if (document.getElementById('main-menu').style.display !== 'none') updateShopUI();
-            
-            if (sfxEnabled) sfxPotWin();
-            alert("✨ GOD MODE ACTIVATED ✨\nAll charms unlocked. 100% win rate engaged!");
+            updateShopUI();
+            renderGodModeMenu();
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = `💵 Money set to $${amount}.`;
+            if (typeof toast === 'function') toast(`💵 Money set to $${amount}`, 'win');
+        }
+
+        function godRemoveCharm(index) {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
+            if (!Array.isArray(playerInventory)) playerInventory = [];
+            const removed = playerInventory.splice(index, 1)[0];
+            if (removed && equippedCharm === removed && !playerInventory.includes(removed)) equippedCharm = null;
+            saveEconomy();
+            updateShopUI();
+            renderGodModeMenu();
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = removed ? `Removed charm ${removed}.` : 'Charm removed.';
+        }
+
+        function godClearCharms() {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
+            if (!confirm('Remove ALL of your charms?')) return;
+            playerInventory = [];
+            equippedCharm = null;
+            saveEconomy();
+            updateShopUI();
+            renderGodModeMenu();
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = 'All charms removed.';
+            if (typeof toast === 'function') toast('All charms removed.', 'lose');
+        }
+
+        function godUnlockAllCharms() {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
+            getAllGameCharms().forEach(charm => {
+                if (!playerInventory.includes(charm)) playerInventory.push(charm);
+            });
+            saveEconomy();
+            updateShopUI();
+            renderGodModeMenu();
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = '✨ All charms unlocked.';
+            if (typeof toast === 'function') toast('✨ All charms unlocked', 'win');
         }
 
         function resetLocalProgressAfterAdminReset() {
@@ -1491,6 +1661,7 @@
             isDoubleOrNothing = false;
             pendingDonRewards = { money: 0, mmr: 0 };
             godMode = false;
+            if (typeof renderGodModeMenu === 'function') renderGodModeMenu();
 
             const wallet = document.getElementById('wallet-balance');
             if (wallet) wallet.innerText = '0';
@@ -2349,12 +2520,18 @@
                 players.push({ id: i, name: name, dice: 20, isBot: isBot, color: color });
             }
 
-            let highestHumanRankIndex = getRank(highestHumanMmr).index;
-            playerCheatChance = (7 - highestHumanRankIndex) * 0.05; 
+            const humanPlayers = players.filter(p => !p.isBot);
+            const isBotOnlyMatch = humanPlayers.length === 1 && players.some(p => p.isBot);
+            playerCheatChance = isBotOnlyMatch ? getRiggedChanceForMmr(highestHumanMmr) : 0;
 
             if (godMode) {
                 players.forEach(p => { if (p.isBot) p.dice = 1; else p.dice = 999; });
                 playerCheatChance = 1.0; 
+            }
+
+            if (isBotOnlyMatch && !godMode && playerCheatChance > 0 && typeof toast === 'function') {
+                const rankName = getRank(highestHumanMmr).name;
+                toast(`🎯 ${rankName} bot-game boost active: ${Math.round(playerCheatChance * 100)}% extra winning-number chance`, 'info');
             }
 
             document.getElementById('main-menu').style.display = 'none';
