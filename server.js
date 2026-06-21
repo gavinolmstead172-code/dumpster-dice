@@ -32,12 +32,14 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
+// Test the connection when the server boots up
 pool.connect(async (err, client, release) => {
   if (err) {
     console.error('Database connection failed. Is the DATABASE_URL correct?', err.stack);
   } else {
     console.log('✅ Successfully connected to the PostgreSQL database!');
     
+    // Auto-build the table if it doesn't exist yet
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -64,6 +66,7 @@ pool.connect(async (err, client, release) => {
     }
   }
 });
+/* ---------------------------------------- */
 
 const MAX_ROOMS = 5;
 const MAX_PLAYERS = 4;
@@ -166,8 +169,15 @@ function getLobbyList() {
   return list;
 }
 
-function broadcastLobbyList() {
-  io.emit('lobbyList', getLobbyList());
+function broadcastLobbyList() { io.emit('lobbyList', getLobbyList()); }
+
+async function broadcastLeaderboard() {
+  try {
+    const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
+    io.emit('leaderboardData', r.rows);
+  } catch (e) {
+    console.error('Leaderboard broadcast error:', e);
+  }
 }
 
 function closeRoom(room, reason) {
@@ -183,10 +193,7 @@ function broadcastRoomUpdate(room) {
   const data = {
     roomId: room.id,
     players: room.players.map((p, i) => ({
-      name: p.name,
-      color: p.color,
-      socketId: p.socketId,
-      isHost: i === 0
+      name: p.name, color: p.color, socketId: p.socketId, isHost: i === 0
     }))
   };
   room.players.forEach(p => io.to(p.socketId).emit('lobbyUpdate', data));
@@ -208,24 +215,16 @@ io.on('connection', (socket) => {
   socket.on('register', async ({ username, password }) => {
     try {
       const trimName = (username || '').trim();
-      if (!trimName || trimName.length < 2) {
-        socket.emit('authError', 'Username must be at least 2 characters');
-        return;
-      }
-      if (!password || password.length < 4) {
-        socket.emit('authError', 'Password must be at least 4 characters');
-        return;
-      }
+      if (!trimName || trimName.length < 2) { socket.emit('authError', 'Username must be at least 2 characters'); return; }
+      if (!password || password.length < 4) { socket.emit('authError', 'Password must be at least 4 characters'); return; }
       const existing = await dbGet(trimName);
-      if (existing) {
-        socket.emit('authError', 'That username is already taken');
-        return;
-      }
+      if (existing) { socket.emit('authError', 'That username is already taken'); return; }
       const hash = await bcrypt.hash(password, 10);
       const row = await dbCreate(trimName, hash);
       socket.data.username = trimName;
       console.log('Registered: ' + trimName);
       socket.emit('authSuccess', safeProfile(row));
+      broadcastLeaderboard();
     } catch (e) {
       console.error('Register error:', e);
       socket.emit('authError', 'Server error. Try again.');
@@ -235,24 +234,16 @@ io.on('connection', (socket) => {
   socket.on('login', async ({ username, password }) => {
     try {
       const trimName = (username || '').trim();
-      if (!trimName) {
-        socket.emit('authError', 'Enter a username');
-        return;
-      }
+      if (!trimName) { socket.emit('authError', 'Enter a username'); return; }
       const row = await dbGet(trimName);
-      if (!row) {
-        socket.emit('authError', 'Username not found');
-        return;
-      }
+      if (!row) { socket.emit('authError', 'Username not found'); return; }
       const ok = await bcrypt.compare(password, row.password_hash);
-      if (!ok) {
-        socket.emit('authError', 'Wrong password');
-        return;
-      }
+      if (!ok) { socket.emit('authError', 'Wrong password'); return; }
       const refreshed = await dbRefreshSession(trimName);
       socket.data.username = trimName;
       console.log('Logged in: ' + trimName);
       socket.emit('authSuccess', safeProfile(refreshed));
+      broadcastLeaderboard();
     } catch (e) {
       console.error('Login error:', e);
       socket.emit('authError', 'Server error. Try again.');
@@ -273,6 +264,7 @@ io.on('connection', (socket) => {
       socket.data.username = row.username;
       console.log('Auto-login: ' + row.username);
       socket.emit('authSuccess', safeProfile(row));
+      broadcastLeaderboard();
     } catch (e) {
       console.error('Auto-login error:', e);
       socket.emit('autoLoginFailed');
@@ -293,6 +285,7 @@ io.on('connection', (socket) => {
     try {
       if (!username) return;
       await dbSave(username, { money, mmr, wins, losses, inventory, equippedCharm });
+      broadcastLeaderboard();
     } catch (e) {
       console.error('Save error:', e);
     }
@@ -300,15 +293,8 @@ io.on('connection', (socket) => {
 
   /* LOBBY */
   socket.on('createLobby', ({ name, color, lobbyName }) => {
-    if (getRoomBySocket(socket.id)) {
-      socket.emit('lobbyError', 'Already in a lobby');
-      return;
-    }
-    if (rooms.size >= MAX_ROOMS) {
-      socket.emit('lobbyError', 'Max lobbies (5) reached — try joining one!');
-      return;
-    }
-
+    if (getRoomBySocket(socket.id)) { socket.emit('lobbyError', 'Already in a lobby'); return; }
+    if (rooms.size >= MAX_ROOMS) { socket.emit('lobbyError', 'Max lobbies (5) reached — try joining one!'); return; }
     const id = String(++roomCounter);
     const room = {
       id,
@@ -320,7 +306,6 @@ io.on('connection', (socket) => {
       humanPlayerMap: {},
       pendingRequests: []
     };
-
     rooms.set(id, room);
     socket.emit('joinedLobby', { isHost: true, roomId: id });
     broadcastLobbyList();
@@ -330,23 +315,10 @@ io.on('connection', (socket) => {
 
   socket.on('requestJoin', ({ roomId, name, color }) => {
     const room = rooms.get(roomId);
-    if (!room) {
-      socket.emit('lobbyError', 'Lobby not found');
-      return;
-    }
-    if (room.gameStarted) {
-      socket.emit('lobbyError', 'Game already started');
-      return;
-    }
-    if (room.players.length >= MAX_PLAYERS) {
-      socket.emit('lobbyError', 'Lobby is full');
-      return;
-    }
-    if (room.pendingRequests.some(r => r.socketId === socket.id)) {
-      socket.emit('lobbyError', 'Request already sent');
-      return;
-    }
-
+    if (!room) { socket.emit('lobbyError', 'Lobby not found'); return; }
+    if (room.gameStarted) { socket.emit('lobbyError', 'Game already started'); return; }
+    if (room.players.length >= MAX_PLAYERS) { socket.emit('lobbyError', 'Lobby is full'); return; }
+    if (room.pendingRequests.some(r => r.socketId === socket.id)) { socket.emit('lobbyError', 'Request already sent'); return; }
     room.pendingRequests.push({ socketId: socket.id, name, color });
     socket.emit('joinPending', { roomId, hostName: room.players[0]?.name });
     io.to(room.hostSocketId).emit('joinRequest', { socketId: socket.id, name, color, roomId });
@@ -356,17 +328,10 @@ io.on('connection', (socket) => {
   socket.on('approveJoin', ({ roomId, socketId }) => {
     const room = rooms.get(roomId);
     if (!room || socket.id !== room.hostSocketId) return;
-
     const req = room.pendingRequests.find(r => r.socketId === socketId);
     if (!req) return;
-
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socketId);
-
-    if (room.players.length >= MAX_PLAYERS) {
-      io.to(socketId).emit('joinDenied', 'Lobby is now full');
-      return;
-    }
-
+    if (room.players.length >= MAX_PLAYERS) { io.to(socketId).emit('joinDenied', 'Lobby is now full'); return; }
     room.players.push({ socketId, name: req.name, color: req.color });
     io.to(socketId).emit('joinApproved', { roomId, isHost: false });
     broadcastLobbyList();
@@ -436,54 +401,52 @@ io.on('connection', (socket) => {
   socket.on('requestRoll', () => {
     const room = getRoomBySocket(socket.id);
     if (!room) return;
-
     const isHost = socket.id === room.hostSocketId;
     const isTurn = !room.currentTurnSocketId || room.currentTurnSocketId === socket.id;
-
-    if (room.gameStarted && !isHost && !isTurn) {
-      socket.emit('notYourTurn');
-      return;
-    }
-
+    if (room.gameStarted && !isHost && !isTurn) { socket.emit('notYourTurn'); return; }
     const roll = Math.floor(Math.random() * 6) + 1;
     console.log(`Room ${room.id}: ${socket.id} rolled ${roll}`);
-
-    room.players.forEach(p => io.to(p.socketId).emit('rollResult', {
-      playerID: socket.id,
-      roll
-    }));
+    room.players.forEach(p => io.to(p.socketId).emit('rollResult', { playerID: socket.id, roll }));
   });
 
   socket.on('stateSync', (state) => {
     const room = getRoomBySocket(socket.id);
     if (!room || socket.id !== room.hostSocketId) return;
-
-    room.players.forEach(p => {
-      if (p.socketId !== socket.id) {
-        io.to(p.socketId).emit('stateSync', state);
-      }
-    });
-
+    room.players.forEach(p => { if (p.socketId !== socket.id) io.to(p.socketId).emit('stateSync', state); });
     if (state.gameActive === false && room.gameStarted && !room.closePending) {
       room.closePending = true;
       setTimeout(() => closeRoom(room, 'Game over'), 8000);
     }
   });
 
+  socket.on('gameFx', (fx = {}) => {
+    const room = getRoomBySocket(socket.id);
+    if (!room || !fx || typeof fx !== 'object') return;
+
+    const allowedTypes = new Set(['spinnerStart', 'spinnerTick', 'spinnerEnd', 'roll', 'taunt']);
+    if (!allowedTypes.has(fx.type)) return;
+
+    const safeFx = { ...fx };
+    if (typeof safeFx.text === 'string') safeFx.text = safeFx.text.substring(0, 160);
+    if (typeof safeFx.message === 'string') safeFx.message = safeFx.message.substring(0, 180);
+    if (typeof safeFx.name === 'string') safeFx.name = safeFx.name.substring(0, 32);
+    if (typeof safeFx.color !== 'string') safeFx.color = '#fff';
+
+    // Effects are already shown locally on the sender, so send them to everyone else in the room.
+    room.players.forEach(p => {
+      if (p.socketId !== socket.id) io.to(p.socketId).emit('gameFx', safeFx);
+    });
+  });
+
   socket.on('chatMessage', ({ name, color, text }) => {
     const room = getRoomBySocket(socket.id);
     if (!room || !name || !text) return;
-
     room.players.forEach(p => io.to(p.socketId).emit('chatMessage', {
-      name,
-      color: color || '#fff',
-      text: String(text).substring(0, 200)
+      name, color: color || '#fff', text: String(text).substring(0, 200)
     }));
   });
 
-  socket.on('getLobbyList', () => {
-    socket.emit('lobbyList', getLobbyList());
-  });
+  socket.on('getLobbyList', () => { socket.emit('lobbyList', getLobbyList()); });
 
   socket.on('getLeaderboard', async () => {
     try {
@@ -491,48 +454,28 @@ io.on('connection', (socket) => {
         'SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10'
       );
       socket.emit('leaderboardData', r.rows);
-    } catch(e) {
-      console.error('Leaderboard error:', e);
-    }
+    } catch(e) { console.error('Leaderboard error:', e); }
   });
 
-  /* ADMIN - Bingle Berry only */
+  /* ADMIN (Bingle Berry only) */
   socket.on('adminGetUsers', async ({ username }) => {
-    if (username !== 'Bingle Berry') {
-      socket.emit('adminError', 'Unauthorized');
-      return;
-    }
-
+    if (username !== 'Bingle Berry') { socket.emit('adminError', 'Unauthorized'); return; }
     try {
       const r = await pool.query(
         'SELECT username, money, mmr, wins, losses, created_at FROM users ORDER BY username ASC'
       );
       socket.emit('adminUsersList', r.rows);
-    } catch(e) {
-      console.error(e);
-      socket.emit('adminError', 'Failed to fetch users');
-    }
+    } catch(e) { console.error(e); socket.emit('adminError', 'Failed to fetch users'); }
   });
 
   socket.on('adminDeleteUser', async ({ adminUsername, targetUsername }) => {
-    if (adminUsername !== 'Bingle Berry') {
-      socket.emit('adminError', 'Unauthorized');
-      return;
-    }
-
-    if (targetUsername === 'Bingle Berry') {
-      socket.emit('adminError', 'Cannot delete admin account');
-      return;
-    }
-
+    if (adminUsername !== 'Bingle Berry') { socket.emit('adminError', 'Unauthorized'); return; }
+    if (targetUsername === 'Bingle Berry') { socket.emit('adminError', 'Cannot delete admin account'); return; }
     try {
       await pool.query('DELETE FROM users WHERE username=$1', [targetUsername]);
       console.log(`Admin deleted user: ${targetUsername}`);
       socket.emit('adminDeleteSuccess', targetUsername);
-    } catch(e) {
-      console.error(e);
-      socket.emit('adminError', 'Delete failed');
-    }
+    } catch(e) { console.error(e); socket.emit('adminError', 'Delete failed'); }
   });
 
   socket.on('adminResetUser', async ({ adminUsername, targetUsername }) => {
@@ -543,14 +486,12 @@ io.on('connection', (socket) => {
 
     try {
       const target = (targetUsername || '').trim();
-
       if (!target) {
         socket.emit('adminError', 'Missing target user');
         return;
       }
 
       const resetRow = await dbResetUserProgress(target);
-
       if (!resetRow) {
         socket.emit('adminError', `User not found: ${target}`);
         return;
@@ -558,15 +499,8 @@ io.on('connection', (socket) => {
 
       console.log(`↻ Admin reset progress for: ${target}`);
 
-      io.emit('profilesReset', {
-        by: adminUsername,
-        targetUsername: target,
-        all: false
-      });
-
-      socket.emit('adminResetUserSuccess', {
-        targetUsername: target
-      });
+      io.emit('profilesReset', { by: adminUsername, targetUsername: target, all: false });
+      socket.emit('adminResetUserSuccess', { targetUsername: target });
 
       const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
       io.emit('leaderboardData', r.rows);
@@ -596,49 +530,36 @@ io.on('connection', (socket) => {
 
       console.log(`🧨 Admin reset all player progress. Accounts reset: ${result.rowCount}`);
 
-      io.emit('profilesReset', {
-        by: adminUsername,
-        all: true
-      });
-
+      io.emit('profilesReset', { by: adminUsername, all: true });
       io.emit('leaderboardData', []);
-
-      socket.emit('adminResetAllSuccess', {
-        resetCount: result.rowCount
-      });
+      socket.emit('adminResetAllSuccess', { resetCount: result.rowCount });
     } catch (e) {
       console.error('Admin reset-all error:', e);
       socket.emit('adminError', 'Reset failed');
     }
   });
 
+  // NEW: God Mode Listener
   socket.on('adminTriggerGodMode', ({ adminUsername, targetUsername }) => {
     if (adminUsername !== 'Bingle Berry') { 
-      socket.emit('adminError', 'Unauthorized. Only Bingle Berry has this power.');
-      return;
+      socket.emit('adminError', 'Unauthorized. Only Bingle Berry has this power.'); 
+      return; 
     }
-
     console.log(`⚡ Admin granted God Mode to: ${targetUsername}`);
     io.emit('godModeActivated', { targetUsername }); 
   });
 
   socket.on('disconnect', () => {
     console.log('Disconnected: ' + socket.id);
-
     for (const room of rooms.values()) {
       room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socket.id);
     }
-
     const room = getRoomBySocket(socket.id);
-
-    if (!room) {
-      broadcastLobbyList();
-      return;
-    }
-
+    if (!room) { broadcastLobbyList(); return; }
     const wasHost = socket.id === room.hostSocketId;
     room.players = room.players.filter(p => p.socketId !== socket.id);
     
+    // Game rule: if the host leaves/disconnects, the whole lobby closes.
     if (wasHost) {
       closeRoom(room, 'Host left the lobby');
     } else if (room.players.length === 0) {
@@ -652,17 +573,15 @@ io.on('connection', (socket) => {
 
 /* --- PORT FIX --- */
 const PORT = process.env.PORT || 5000;
+http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
-http.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
-
-/* --- LEADERBOARD AUTO-REFRESH - every 3 mins --- */
+/* --- LEADERBOARD AUTO-REFRESH (Every 3 mins) --- */
 setInterval(async () => {
   try {
     const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
+    // Broadcasts the updated leaderboard to all connected players
     io.emit('leaderboardData', r.rows);
   } catch (e) {
     console.error('Auto-leaderboard update error:', e);
   }
-}, 3 * 60 * 1000);
+}, 3 * 60 * 1000); // 3 minutes in milliseconds
