@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1476,10 +1475,24 @@
             return [...new Set(allCharms)];
         }
 
-        function getRiggedChanceForMmr(mmr) {
+        function getRiggedTierNameAndChance(mmr) {
+            // Uses only the base rank tier, so Copper 1-5 all share Copper odds,
+            // Bronze 1-5 all share Bronze odds, etc.
             const rank = getRank(mmr || 0);
+            const tierNames = ['Copper', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Champion'];
             const chances = [0.90, 0.70, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00];
-            return chances[rank.index] ?? 0;
+            const tierIndex = Math.max(0, Math.min(rank.index || 0, chances.length - 1));
+            return { tierName: tierNames[tierIndex], chance: chances[tierIndex] ?? 0, rank };
+        }
+
+        function getRiggedChanceForMmr(mmr) {
+            return getRiggedTierNameAndChance(mmr).chance;
+        }
+
+        function isBotOnlyRigEligible(actingPlayerId) {
+            if (!players || players.length === 0) return false;
+            const humanPlayers = players.filter(p => !p.isBot);
+            return humanPlayers.length === 1 && players.some(p => p.isBot) && humanPlayers[0].id === actingPlayerId;
         }
 
         function getCurrentUserMmr() {
@@ -1487,17 +1500,6 @@
             const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
             const pData = stats[loggedInUser.username];
             return pData ? (pData.mmr || (typeof pData === 'number' ? pData * 35 : 0)) : (loggedInUser.mmr || 0);
-        }
-
-        function computeCurrentBotOnlyCheatChance() {
-            if (!players || players.length === 0) return 0;
-            const humanPlayers = players.filter(p => !p.isBot);
-            if (humanPlayers.length !== 1 || !players.some(p => p.isBot)) return 0;
-            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
-            const humanName = humanPlayers[0].name;
-            const pData = stats[humanName];
-            const mmr = pData ? (pData.mmr || (typeof pData === 'number' ? pData * 35 : 0)) : 0;
-            return getRiggedChanceForMmr(mmr);
         }
 
         function openGodModeMenu() {
@@ -1523,10 +1525,9 @@
             if (moneyInput) moneyInput.value = playerMoney || 0;
 
             const mmr = getCurrentUserMmr();
-            const rank = getRank(mmr);
-            const chance = getRiggedChanceForMmr(mmr);
+            const rig = getRiggedTierNameAndChance(mmr);
             const info = document.getElementById('god-rig-info');
-            if (info) info.innerText = `Current rank: ${rank.name} • Bot-only winning-number boost: ${Math.round(chance * 100)}% extra`;
+            if (info) info.innerText = `Current rank: ${rig.rank.name} (${rig.tierName} tier) • Bot-only winning-number boost: ${Math.round(rig.chance * 100)}% extra`;
 
             const list = document.getElementById('god-charm-list');
             if (!list) return;
@@ -1546,21 +1547,7 @@
         function toggleGodModeFromMenu() {
             if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
             godMode = !godMode;
-
-            if (godMode) {
-                playerCheatChance = 1.0;
-                if (gameActive && Array.isArray(players)) {
-                    players.forEach(p => {
-                        if (p.isBot) p.dice = Math.min(p.dice, 1);
-                        else p.dice = Math.max(p.dice, 999);
-                    });
-                    render();
-                    updateControls();
-                }
-            } else {
-                playerCheatChance = computeCurrentBotOnlyCheatChance();
-            }
-
+            playerCheatChance = godMode ? 1.0 : playerCheatChance;
             const msg = document.getElementById('admin-msg');
             if (msg) msg.innerText = godMode ? '✨ God Mode enabled.' : 'God Mode disabled.';
             if (typeof toast === 'function') toast(godMode ? '✨ God Mode ON' : 'God Mode OFF', godMode ? 'win' : 'info');
@@ -2522,7 +2509,8 @@
 
             const humanPlayers = players.filter(p => !p.isBot);
             const isBotOnlyMatch = humanPlayers.length === 1 && players.some(p => p.isBot);
-            playerCheatChance = isBotOnlyMatch ? getRiggedChanceForMmr(highestHumanMmr) : 0;
+            const rigInfo = getRiggedTierNameAndChance(highestHumanMmr);
+            playerCheatChance = isBotOnlyMatch ? rigInfo.chance : 0;
 
             if (godMode) {
                 players.forEach(p => { if (p.isBot) p.dice = 1; else p.dice = 999; });
@@ -2530,8 +2518,7 @@
             }
 
             if (isBotOnlyMatch && !godMode && playerCheatChance > 0 && typeof toast === 'function') {
-                const rankName = getRank(highestHumanMmr).name;
-                toast(`🎯 ${rankName} bot-game boost active: ${Math.round(playerCheatChance * 100)}% extra winning-number chance`, 'info');
+                toast(`🎯 ${rigInfo.tierName} tier boost active: ${Math.round(playerCheatChance * 100)}% extra winning-number chance`, 'info');
             }
 
             document.getElementById('main-menu').style.display = 'none';
@@ -2775,8 +2762,14 @@
             let roll; let emptySlots = [];
             for(let i=0; i<6; i++) { if (sharedBoard[i] === null) emptySlots.push(i+1); }
 
-            if (preRoll !== null) roll = preRoll;
-            else if (!p.isBot && emptySlots.length === 1 && Math.random() < playerCheatChance) roll = emptySlots[0];
+            // Bot-only rank boost: if the player is in a human-vs-bots match and there is
+            // exactly one winning number left on the shared track, they get an extra chance
+            // to roll that number. This overrides even pre-rolled Socket.IO rolls so it works
+            // in local games and online-hosted games.
+            if (!p.isBot && emptySlots.length === 1 && isBotOnlyRigEligible(actingPlayerId) && Math.random() < playerCheatChance) {
+                roll = emptySlots[0];
+                if (typeof toast === 'function') toast(`🎯 Rank boost hit! Rolled the winning number ${roll}.`, 'success');
+            } else if (preRoll !== null) roll = preRoll;
             else roll = Math.floor(Math.random() * 6) + 1;
 
             p.dice--;
