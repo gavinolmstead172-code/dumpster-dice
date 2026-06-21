@@ -168,9 +168,7 @@ function getLobbyList() {
   return list;
 }
 
-function broadcastLobbyList() {
-  io.emit('lobbyList', getLobbyList());
-}
+function broadcastLobbyList() { io.emit('lobbyList', getLobbyList()); }
 
 async function broadcastLeaderboard() {
   try {
@@ -194,10 +192,7 @@ function broadcastRoomUpdate(room) {
   const data = {
     roomId: room.id,
     players: room.players.map((p, i) => ({
-      name: p.name,
-      color: p.color,
-      socketId: p.socketId,
-      isHost: i === 0
+      name: p.name, color: p.color, socketId: p.socketId, isHost: i === 0
     }))
   };
   room.players.forEach(p => io.to(p.socketId).emit('lobbyUpdate', data));
@@ -210,10 +205,6 @@ function getRoomBySocket(socketId) {
   return null;
 }
 
-function getPlayerBySocket(room, socketId) {
-  return room ? room.players.find(p => p.socketId === socketId) : null;
-}
-
 function getTradeBySocket(socketId) {
   for (const trade of trades.values()) {
     if (trade.fromSocketId === socketId || trade.toSocketId === socketId) return trade;
@@ -221,18 +212,36 @@ function getTradeBySocket(socketId) {
   return null;
 }
 
+function getOnlineTradePlayers(exceptSocketId) {
+  const list = [];
+  for (const [socketId, s] of io.sockets.sockets) {
+    if (socketId === exceptSocketId) continue;
+    if (!s.data || !s.data.username) continue;
+    const room = getRoomBySocket(socketId);
+    list.push({
+      socketId,
+      name: s.data.username,
+      color: '#00E5FF',
+      inLobby: !!room,
+      inGame: !!(room && room.gameStarted),
+      roomName: room ? room.name : ''
+    });
+  }
+  return list.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function sanitizeMoneyOffer(amount) {
+  const n = Math.floor(Number(amount) || 0);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, 1000000000);
+}
+
 function sanitizeTradeItems(items) {
   if (!Array.isArray(items)) return [];
-
   return items.slice(0, 12).map(item => {
-    if (typeof item === 'string') {
-      return { charm: item.slice(0, 16), wear: 'FT' };
-    }
-
+    if (typeof item === 'string') return { charm: item.slice(0, 16), wear: 'FT' };
     if (!item || typeof item !== 'object') return null;
-
     const wear = ['FN','MW','FT','WW','BS'].includes(item.wear) ? item.wear : 'FT';
-
     return {
       charm: String(item.charm || item.c || '?').slice(0, 16),
       wear,
@@ -257,25 +266,13 @@ io.on('connection', (socket) => {
   socket.on('register', async ({ username, password }) => {
     try {
       const trimName = (username || '').trim();
-      if (!trimName || trimName.length < 2) {
-        socket.emit('authError', 'Username must be at least 2 characters');
-        return;
-      }
-      if (!password || password.length < 4) {
-        socket.emit('authError', 'Password must be at least 4 characters');
-        return;
-      }
-
+      if (!trimName || trimName.length < 2) { socket.emit('authError', 'Username must be at least 2 characters'); return; }
+      if (!password || password.length < 4) { socket.emit('authError', 'Password must be at least 4 characters'); return; }
       const existing = await dbGet(trimName);
-      if (existing) {
-        socket.emit('authError', 'That username is already taken');
-        return;
-      }
-
+      if (existing) { socket.emit('authError', 'That username is already taken'); return; }
       const hash = await bcrypt.hash(password, 10);
       const row = await dbCreate(trimName, hash);
       socket.data.username = trimName;
-
       console.log('Registered: ' + trimName);
       socket.emit('authSuccess', safeProfile(row));
       broadcastLeaderboard();
@@ -288,26 +285,13 @@ io.on('connection', (socket) => {
   socket.on('login', async ({ username, password }) => {
     try {
       const trimName = (username || '').trim();
-      if (!trimName) {
-        socket.emit('authError', 'Enter a username');
-        return;
-      }
-
+      if (!trimName) { socket.emit('authError', 'Enter a username'); return; }
       const row = await dbGet(trimName);
-      if (!row) {
-        socket.emit('authError', 'Username not found');
-        return;
-      }
-
+      if (!row) { socket.emit('authError', 'Username not found'); return; }
       const ok = await bcrypt.compare(password, row.password_hash);
-      if (!ok) {
-        socket.emit('authError', 'Wrong password');
-        return;
-      }
-
+      if (!ok) { socket.emit('authError', 'Wrong password'); return; }
       const refreshed = await dbRefreshSession(trimName);
       socket.data.username = trimName;
-
       console.log('Logged in: ' + trimName);
       socket.emit('authSuccess', safeProfile(refreshed));
       broadcastLeaderboard();
@@ -323,13 +307,11 @@ io.on('connection', (socket) => {
         socket.emit('autoLoginFailed');
         return;
       }
-
       const row = await dbGetBySessionToken(sessionToken);
       if (!row) {
         socket.emit('autoLoginFailed');
         return;
       }
-
       socket.data.username = row.username;
       console.log('Auto-login: ' + row.username);
       socket.emit('authSuccess', safeProfile(row));
@@ -362,16 +344,8 @@ io.on('connection', (socket) => {
 
   /* LOBBY */
   socket.on('createLobby', ({ name, color, lobbyName }) => {
-    if (getRoomBySocket(socket.id)) {
-      socket.emit('lobbyError', 'Already in a lobby');
-      return;
-    }
-
-    if (rooms.size >= MAX_ROOMS) {
-      socket.emit('lobbyError', 'Max lobbies (5) reached — try joining one!');
-      return;
-    }
-
+    if (getRoomBySocket(socket.id)) { socket.emit('lobbyError', 'Already in a lobby'); return; }
+    if (rooms.size >= MAX_ROOMS) { socket.emit('lobbyError', 'Max lobbies (5) reached — try joining one!'); return; }
     const id = String(++roomCounter);
     const room = {
       id,
@@ -383,68 +357,42 @@ io.on('connection', (socket) => {
       humanPlayerMap: {},
       pendingRequests: []
     };
-
     rooms.set(id, room);
     socket.emit('joinedLobby', { isHost: true, roomId: id });
     broadcastLobbyList();
     broadcastRoomUpdate(room);
-
     console.log(`Lobby "${room.name}" created (id:${id})`);
   });
 
   socket.on('requestJoin', ({ roomId, name, color }) => {
     const room = rooms.get(roomId);
-
-    if (!room) {
-      socket.emit('lobbyError', 'Lobby not found');
-      return;
-    }
-    if (room.gameStarted) {
-      socket.emit('lobbyError', 'Game already started');
-      return;
-    }
-    if (room.players.length >= MAX_PLAYERS) {
-      socket.emit('lobbyError', 'Lobby is full');
-      return;
-    }
-    if (room.pendingRequests.some(r => r.socketId === socket.id)) {
-      socket.emit('lobbyError', 'Request already sent');
-      return;
-    }
-
+    if (!room) { socket.emit('lobbyError', 'Lobby not found'); return; }
+    if (room.gameStarted) { socket.emit('lobbyError', 'Game already started'); return; }
+    if (room.players.length >= MAX_PLAYERS) { socket.emit('lobbyError', 'Lobby is full'); return; }
+    if (room.pendingRequests.some(r => r.socketId === socket.id)) { socket.emit('lobbyError', 'Request already sent'); return; }
     room.pendingRequests.push({ socketId: socket.id, name, color });
     socket.emit('joinPending', { roomId, hostName: room.players[0]?.name });
     io.to(room.hostSocketId).emit('joinRequest', { socketId: socket.id, name, color, roomId });
-
     console.log(`${name} requested to join room ${roomId}`);
   });
 
   socket.on('approveJoin', ({ roomId, socketId }) => {
     const room = rooms.get(roomId);
     if (!room || socket.id !== room.hostSocketId) return;
-
     const req = room.pendingRequests.find(r => r.socketId === socketId);
     if (!req) return;
-
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socketId);
-
-    if (room.players.length >= MAX_PLAYERS) {
-      io.to(socketId).emit('joinDenied', 'Lobby is now full');
-      return;
-    }
-
+    if (room.players.length >= MAX_PLAYERS) { io.to(socketId).emit('joinDenied', 'Lobby is now full'); return; }
     room.players.push({ socketId, name: req.name, color: req.color });
     io.to(socketId).emit('joinApproved', { roomId, isHost: false });
     broadcastLobbyList();
     broadcastRoomUpdate(room);
-
     console.log(`${req.name} approved for room ${roomId}`);
   });
 
   socket.on('denyJoin', ({ roomId, socketId }) => {
     const room = rooms.get(roomId);
     if (!room || socket.id !== room.hostSocketId) return;
-
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socketId);
     io.to(socketId).emit('joinDenied', 'Your request was denied by the host');
   });
@@ -453,7 +401,6 @@ io.on('connection', (socket) => {
     const room = roomId ? rooms.get(String(roomId)) : getRoomBySocket(socket.id);
     if (!room) return;
     if (socket.id !== room.hostSocketId) return;
-
     closeRoom(room, reason || 'Host closed the lobby');
   });
 
@@ -462,7 +409,6 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     const wasHost = socket.id === room.hostSocketId;
-
     if (wasHost || closeIfHost || forceClose) {
       closeRoom(room, reason || 'Host left the lobby');
       return;
@@ -483,21 +429,15 @@ io.on('connection', (socket) => {
   socket.on('cancelJoinRequest', ({ roomId } = {}) => {
     const room = roomId ? rooms.get(String(roomId)) : null;
     if (!room) return;
-
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socket.id);
   });
 
   socket.on('startGame', ({ gameMode, humanPlayerMap }) => {
     const room = getRoomBySocket(socket.id);
     if (!room || socket.id !== room.hostSocketId) return;
-
     room.gameStarted = true;
     room.humanPlayerMap = humanPlayerMap || {};
-
-    room.players.forEach(p => {
-      io.to(p.socketId).emit('gameStarted', { gameMode, humanPlayerMap });
-    });
-
+    room.players.forEach(p => io.to(p.socketId).emit('gameStarted', { gameMode, humanPlayerMap }));
     broadcastLobbyList();
     console.log(`Room ${room.id} game started (mode:${gameMode})`);
   });
@@ -505,44 +445,25 @@ io.on('connection', (socket) => {
   socket.on('setCurrentTurn', ({ socketId }) => {
     const room = getRoomBySocket(socket.id);
     if (!room || socket.id !== room.hostSocketId) return;
-
     room.currentTurnSocketId = socketId;
-
-    if (socketId && socketId !== room.hostSocketId) {
-      io.to(socketId).emit('yourTurn');
-    }
+    if (socketId && socketId !== room.hostSocketId) io.to(socketId).emit('yourTurn');
   });
 
   socket.on('requestRoll', () => {
     const room = getRoomBySocket(socket.id);
     if (!room) return;
-
     const isHost = socket.id === room.hostSocketId;
     const isTurn = !room.currentTurnSocketId || room.currentTurnSocketId === socket.id;
-
-    if (room.gameStarted && !isHost && !isTurn) {
-      socket.emit('notYourTurn');
-      return;
-    }
-
+    if (room.gameStarted && !isHost && !isTurn) { socket.emit('notYourTurn'); return; }
     const roll = Math.floor(Math.random() * 6) + 1;
     console.log(`Room ${room.id}: ${socket.id} rolled ${roll}`);
-
-    room.players.forEach(p => {
-      io.to(p.socketId).emit('rollResult', { playerID: socket.id, roll });
-    });
+    room.players.forEach(p => io.to(p.socketId).emit('rollResult', { playerID: socket.id, roll }));
   });
 
   socket.on('stateSync', (state) => {
     const room = getRoomBySocket(socket.id);
     if (!room || socket.id !== room.hostSocketId) return;
-
-    room.players.forEach(p => {
-      if (p.socketId !== socket.id) {
-        io.to(p.socketId).emit('stateSync', state);
-      }
-    });
-
+    room.players.forEach(p => { if (p.socketId !== socket.id) io.to(p.socketId).emit('stateSync', state); });
     if (state.gameActive === false && room.gameStarted && !room.closePending) {
       room.closePending = true;
       setTimeout(() => closeRoom(room, 'Game over'), 8000);
@@ -557,25 +478,24 @@ io.on('connection', (socket) => {
     if (!allowedTypes.has(fx.type)) return;
 
     const safeFx = { ...fx };
-
     if (typeof safeFx.text === 'string') safeFx.text = safeFx.text.substring(0, 160);
     if (typeof safeFx.message === 'string') safeFx.message = safeFx.message.substring(0, 180);
     if (typeof safeFx.name === 'string') safeFx.name = safeFx.name.substring(0, 32);
     if (typeof safeFx.color !== 'string') safeFx.color = '#fff';
 
     room.players.forEach(p => {
-      if (p.socketId !== socket.id) {
-        io.to(p.socketId).emit('gameFx', safeFx);
-      }
+      if (p.socketId !== socket.id) io.to(p.socketId).emit('gameFx', safeFx);
     });
   });
 
   /* TRADING */
-  socket.on('tradeRequest', ({ toSocketId, fromName, fromColor }) => {
-    const room = getRoomBySocket(socket.id);
+  socket.on('getTradePlayers', () => {
+    socket.emit('tradePlayers', getOnlineTradePlayers(socket.id));
+  });
 
-    if (!room) {
-      socket.emit('tradeError', 'Join an online lobby before trading.');
+  socket.on('tradeRequest', ({ toSocketId, fromName, fromColor }) => {
+    if (!socket.data.username) {
+      socket.emit('tradeError', 'Sign in before trading.');
       return;
     }
 
@@ -584,11 +504,9 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const target = getPlayerBySocket(room, toSocketId);
-    const fromPlayer = getPlayerBySocket(room, socket.id);
-
-    if (!target || !fromPlayer) {
-      socket.emit('tradeError', 'That player is not in your lobby.');
+    const targetSocket = io.sockets.sockets.get(String(toSocketId));
+    if (!targetSocket || !targetSocket.data || !targetSocket.data.username) {
+      socket.emit('tradeError', 'That player is not online anymore.');
       return;
     }
 
@@ -598,18 +516,19 @@ io.on('connection', (socket) => {
     }
 
     const tradeId = String(++tradeCounter);
-
     const trade = {
       id: tradeId,
-      roomId: room.id,
+      roomId: null,
       fromSocketId: socket.id,
-      toSocketId,
-      fromName: String(fromName || fromPlayer.name || 'Player').slice(0, 32),
-      fromColor: fromColor || fromPlayer.color || '#fff',
-      toName: target.name,
-      toColor: target.color || '#fff',
+      toSocketId: String(toSocketId),
+      fromName: String(fromName || socket.data.username || 'Player').slice(0, 32),
+      fromColor: fromColor || '#00E5FF',
+      toName: targetSocket.data.username,
+      toColor: '#00E5FF',
       fromOffer: [],
       toOffer: [],
+      fromMoney: 0,
+      toMoney: 0,
       fromReady: false,
       toReady: false,
       accepted: false
@@ -617,7 +536,7 @@ io.on('connection', (socket) => {
 
     trades.set(tradeId, trade);
 
-    io.to(toSocketId).emit('tradeRequest', {
+    io.to(trade.toSocketId).emit('tradeRequest', {
       tradeId,
       fromSocketId: socket.id,
       fromName: trade.fromName,
@@ -655,52 +574,62 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('tradeOfferUpdate', ({ tradeId, offerItems }) => {
+  socket.on('tradeOfferUpdate', ({ tradeId, offerItems, moneyOffer }) => {
     const trade = trades.get(String(tradeId));
     if (!trade || !trade.accepted) return;
 
     const sanitized = sanitizeTradeItems(offerItems);
+    const money = sanitizeMoneyOffer(moneyOffer);
 
     if (socket.id === trade.fromSocketId) {
       trade.fromOffer = sanitized;
+      trade.fromMoney = money;
       trade.fromReady = false;
 
       io.to(trade.toSocketId).emit('tradeOfferUpdate', {
         offerItems: trade.fromOffer,
+        moneyOffer: trade.fromMoney,
         ready: trade.fromReady
       });
 
       io.to(trade.fromSocketId).emit('tradeReadyUpdate', {
         youReady: trade.fromReady,
-        themReady: trade.toReady
+        themReady: trade.toReady,
+        theirMoneyOffer: trade.toMoney
       });
     } else if (socket.id === trade.toSocketId) {
       trade.toOffer = sanitized;
+      trade.toMoney = money;
       trade.toReady = false;
 
       io.to(trade.fromSocketId).emit('tradeOfferUpdate', {
         offerItems: trade.toOffer,
+        moneyOffer: trade.toMoney,
         ready: trade.toReady
       });
 
       io.to(trade.toSocketId).emit('tradeReadyUpdate', {
         youReady: trade.toReady,
-        themReady: trade.fromReady
+        themReady: trade.fromReady,
+        theirMoneyOffer: trade.fromMoney
       });
     }
   });
 
-  socket.on('tradeReady', ({ tradeId, offerItems }) => {
+  socket.on('tradeReady', ({ tradeId, offerItems, moneyOffer }) => {
     const trade = trades.get(String(tradeId));
     if (!trade || !trade.accepted) return;
 
     const sanitized = sanitizeTradeItems(offerItems);
+    const money = sanitizeMoneyOffer(moneyOffer);
 
     if (socket.id === trade.fromSocketId) {
       trade.fromOffer = sanitized;
+      trade.fromMoney = money;
       trade.fromReady = true;
     } else if (socket.id === trade.toSocketId) {
       trade.toOffer = sanitized;
+      trade.toMoney = money;
       trade.toReady = true;
     } else {
       return;
@@ -708,21 +637,25 @@ io.on('connection', (socket) => {
 
     io.to(trade.fromSocketId).emit('tradeReadyUpdate', {
       youReady: trade.fromReady,
-      themReady: trade.toReady
+      themReady: trade.toReady,
+      theirMoneyOffer: trade.toMoney
     });
 
     io.to(trade.toSocketId).emit('tradeReadyUpdate', {
       youReady: trade.toReady,
-      themReady: trade.fromReady
+      themReady: trade.fromReady,
+      theirMoneyOffer: trade.fromMoney
     });
 
     if (trade.fromReady && trade.toReady) {
       io.to(trade.fromSocketId).emit('tradeComplete', {
-        receiveItems: trade.toOffer
+        receiveItems: trade.toOffer,
+        receiveMoney: trade.toMoney
       });
 
       io.to(trade.toSocketId).emit('tradeComplete', {
-        receiveItems: trade.fromOffer
+        receiveItems: trade.fromOffer,
+        receiveMoney: trade.fromMoney
       });
 
       trades.delete(trade.id);
@@ -731,82 +664,49 @@ io.on('connection', (socket) => {
 
   socket.on('tradeCancel', ({ tradeId } = {}) => {
     const trade = tradeId ? trades.get(String(tradeId)) : getTradeBySocket(socket.id);
-
     if (!trade) return;
-
     if (socket.id !== trade.fromSocketId && socket.id !== trade.toSocketId) return;
-
     cancelTrade(trade, 'Trade cancelled');
   });
 
   socket.on('chatMessage', ({ name, color, text }) => {
     const room = getRoomBySocket(socket.id);
-
     if (!room || !name || !text) return;
-
-    room.players.forEach(p => {
-      io.to(p.socketId).emit('chatMessage', {
-        name,
-        color: color || '#fff',
-        text: String(text).substring(0, 200)
-      });
-    });
+    room.players.forEach(p => io.to(p.socketId).emit('chatMessage', {
+      name, color: color || '#fff', text: String(text).substring(0, 200)
+    }));
   });
 
-  socket.on('getLobbyList', () => {
-    socket.emit('lobbyList', getLobbyList());
-  });
+  socket.on('getLobbyList', () => { socket.emit('lobbyList', getLobbyList()); });
 
   socket.on('getLeaderboard', async () => {
     try {
       const r = await pool.query(
         'SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10'
       );
-
       socket.emit('leaderboardData', r.rows);
-    } catch(e) {
-      console.error('Leaderboard error:', e);
-    }
+    } catch(e) { console.error('Leaderboard error:', e); }
   });
 
   /* ADMIN */
   socket.on('adminGetUsers', async ({ username }) => {
-    if (username !== 'Bingle Berry') {
-      socket.emit('adminError', 'Unauthorized');
-      return;
-    }
-
+    if (username !== 'Bingle Berry') { socket.emit('adminError', 'Unauthorized'); return; }
     try {
       const r = await pool.query(
         'SELECT username, money, mmr, wins, losses, created_at FROM users ORDER BY username ASC'
       );
-
       socket.emit('adminUsersList', r.rows);
-    } catch(e) {
-      console.error(e);
-      socket.emit('adminError', 'Failed to fetch users');
-    }
+    } catch(e) { console.error(e); socket.emit('adminError', 'Failed to fetch users'); }
   });
 
   socket.on('adminDeleteUser', async ({ adminUsername, targetUsername }) => {
-    if (adminUsername !== 'Bingle Berry') {
-      socket.emit('adminError', 'Unauthorized');
-      return;
-    }
-
-    if (targetUsername === 'Bingle Berry') {
-      socket.emit('adminError', 'Cannot delete admin account');
-      return;
-    }
-
+    if (adminUsername !== 'Bingle Berry') { socket.emit('adminError', 'Unauthorized'); return; }
+    if (targetUsername === 'Bingle Berry') { socket.emit('adminError', 'Cannot delete admin account'); return; }
     try {
       await pool.query('DELETE FROM users WHERE username=$1', [targetUsername]);
       console.log(`Admin deleted user: ${targetUsername}`);
       socket.emit('adminDeleteSuccess', targetUsername);
-    } catch(e) {
-      console.error(e);
-      socket.emit('adminError', 'Delete failed');
-    }
+    } catch(e) { console.error(e); socket.emit('adminError', 'Delete failed'); }
   });
 
   socket.on('adminResetUser', async ({ adminUsername, targetUsername }) => {
@@ -817,14 +717,12 @@ io.on('connection', (socket) => {
 
     try {
       const target = (targetUsername || '').trim();
-
       if (!target) {
         socket.emit('adminError', 'Missing target user');
         return;
       }
 
       const resetRow = await dbResetUserProgress(target);
-
       if (!resetRow) {
         socket.emit('adminError', `User not found: ${target}`);
         return;
@@ -832,12 +730,7 @@ io.on('connection', (socket) => {
 
       console.log(`↻ Admin reset progress for: ${target}`);
 
-      io.emit('profilesReset', {
-        by: adminUsername,
-        targetUsername: target,
-        all: false
-      });
-
+      io.emit('profilesReset', { by: adminUsername, targetUsername: target, all: false });
       socket.emit('adminResetUserSuccess', { targetUsername: target });
 
       const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
@@ -868,16 +761,9 @@ io.on('connection', (socket) => {
 
       console.log(`🧨 Admin reset all player progress. Accounts reset: ${result.rowCount}`);
 
-      io.emit('profilesReset', {
-        by: adminUsername,
-        all: true
-      });
-
+      io.emit('profilesReset', { by: adminUsername, all: true });
       io.emit('leaderboardData', []);
-
-      socket.emit('adminResetAllSuccess', {
-        resetCount: result.rowCount
-      });
+      socket.emit('adminResetAllSuccess', { resetCount: result.rowCount });
     } catch (e) {
       console.error('Admin reset-all error:', e);
       socket.emit('adminError', 'Reset failed');
@@ -889,7 +775,6 @@ io.on('connection', (socket) => {
       socket.emit('adminError', 'Unauthorized. Only Bingle Berry has this power.'); 
       return; 
     }
-
     console.log(`⚡ Admin granted God Mode to: ${targetUsername}`);
     io.emit('godModeActivated', { targetUsername }); 
   });
@@ -905,11 +790,7 @@ io.on('connection', (socket) => {
     }
 
     const room = getRoomBySocket(socket.id);
-
-    if (!room) {
-      broadcastLobbyList();
-      return;
-    }
+    if (!room) { broadcastLobbyList(); return; }
 
     const wasHost = socket.id === room.hostSocketId;
     room.players = room.players.filter(p => p.socketId !== socket.id);
@@ -927,10 +808,7 @@ io.on('connection', (socket) => {
 
 /* --- PORT FIX --- */
 const PORT = process.env.PORT || 5000;
-
-http.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
 /* --- LEADERBOARD AUTO-REFRESH --- */
 setInterval(async () => {
