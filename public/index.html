@@ -552,20 +552,25 @@
 
         /* --- TAUNT SYSTEM --- */
         #taunt-panel {
-            position: relative; display: inline-block; margin-left: 10px; vertical-align: middle;
+            position: relative; display: inline-block; margin-left: 0; vertical-align: middle;
         }
         #taunt-btn {
-            width: auto; padding: 15px 24px; font-size: 20px;
             background: linear-gradient(180deg, #9C27B0, #6A1B9A);
-            border-color: #4A148C; box-shadow: 0 6px 0 #4A148C, 0 10px 20px rgba(0,0,0,0.5);
+            border-color: #4A148C;
         }
         #taunt-menu {
-            display: none; position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%);
+            display: none; position: absolute; right: 0; top: calc(100% + 10px);
             width: min(92vw, 420px); background: rgba(15,15,15,0.98); border: 3px solid #9C27B0;
             border-radius: 14px; padding: 12px; z-index: 500; box-shadow: 0 14px 34px rgba(0,0,0,0.85), 0 0 25px rgba(156,39,176,0.45);
         }
         #taunt-menu.open { display: block; animation: tauntPop 0.18s ease; }
-        @keyframes tauntPop { from { transform: translateX(-50%) scale(0.92); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+        @keyframes tauntPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .admin-reset-btn {
+            background: #FF9800; border: none; color: #111; font-weight: 900;
+            font-size: 13px; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+        }
+        .admin-reset-btn:hover { background: #FFD740; }
+        .admin-action-row { display: flex; gap: 8px; align-items: center; }
         .taunt-option {
             width: 100%; background: #191919; border: 2px solid #333; color: #fff; border-radius: 10px;
             padding: 10px 12px; margin: 5px 0; text-align: left; font-weight: 900; cursor: pointer;
@@ -777,6 +782,10 @@
             <button class="header-btn" onclick="goToMainMenu()">🔙 Main Menu</button>
             <button class="header-btn" id="in-game-music-btn" onclick="toggleMusic()">Music: OFF 🎵</button>
             <button class="header-btn" id="in-game-sfx-btn" onclick="toggleSfx()">SFX: OFF 🔔</button>
+            <div id="taunt-panel">
+                <button id="taunt-btn" class="header-btn" onclick="toggleTauntMenu()">TAUNT 💬</button>
+                <div id="taunt-menu"></div>
+            </div>
         </div>
 
         <div class="central-hub" id="hub">
@@ -790,10 +799,6 @@
         <div id="action-log">Waiting to start...</div>
         <br>
         <button id="roll-btn" class="btn-large" style="width: auto;" onclick="executeRoll()">ROLL DICE</button>
-        <div id="taunt-panel">
-            <button id="taunt-btn" class="btn-large" onclick="toggleTauntMenu()">TAUNT 💬</button>
-            <div id="taunt-menu"></div>
-        </div>
 
         <div id="game-over-controls" style="display: none; margin-top: 20px;">
             <h3 id="streak-display" style="color: #FFD700; margin-bottom: 10px; display: none;">🔥 Win Streak: <span id="streak-count">0</span> (x<span id="streak-mult">1</span> Bonus!)</h3>
@@ -965,7 +970,10 @@
                             <div class="admin-user-name">${u.username}${isAdmin ? ' 👑' : ''}</div>
                             <div class="admin-user-meta">MMR: ${u.mmr} &nbsp;·&nbsp; Wins: ${u.wins} &nbsp;·&nbsp; 💵 $${u.money} &nbsp;·&nbsp; Joined: ${date}</div>
                         </div>
-                        ${!isAdmin ? `<button class="admin-del-btn" onclick="adminConfirmDelete('${u.username}')">🗑 Delete</button>` : '<span style="color:#888;font-size:12px;">ADMIN</span>'}
+                        <div class="admin-action-row">
+                            <button class="admin-reset-btn" onclick="adminResetOnePlayer('${u.username}')">↻ Reset</button>
+                            ${!isAdmin ? `<button class="admin-del-btn" onclick="adminConfirmDelete('${u.username}')">🗑 Delete</button>` : '<span style="color:#888;font-size:12px;">ADMIN</span>'}
+                        </div>
                     </div>`;
             });
         });
@@ -1400,11 +1408,14 @@
             const savedToken = localStorage.getItem('dumpsterSessionToken');
             const username = loggedInUser ? loggedInUser.username : null;
 
+            // Clear every local progress key so old charms cannot be re-saved back to the server.
             localStorage.removeItem('dumpsterStats');
-            localStorage.setItem('dumpsterMoney', '0');
-            localStorage.setItem('dumpsterInventory', '[]');
+            localStorage.removeItem('dumpsterMoney');
+            localStorage.removeItem('dumpsterInventory');
             localStorage.removeItem('dumpsterEquippedCharm');
             localStorage.removeItem('dumpsterDailies');
+            localStorage.setItem('dumpsterMoney', '0');
+            localStorage.setItem('dumpsterInventory', '[]');
 
             if (savedToken) localStorage.setItem('dumpsterSessionToken', savedToken);
 
@@ -1430,6 +1441,11 @@
             isDoubleOrNothing = false;
             pendingDonRewards = { money: 0, mmr: 0 };
             godMode = false;
+
+            const wallet = document.getElementById('wallet-balance');
+            if (wallet) wallet.innerText = '0';
+            const grid = document.getElementById('inventory-grid');
+            if (grid) grid.innerHTML = "<div style='color: #777; margin-top: 25px;'>Your inventory is empty.</div>";
 
             loadEconomy();
             loadStats();
@@ -1459,6 +1475,30 @@
             socket.emit('adminResetAllUsers', { adminUsername: loggedInUser.username });
         }
 
+        function adminResetOnePlayer(targetUsername) {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') {
+                const msg = document.getElementById('admin-msg');
+                if (msg) msg.innerText = '⚠️ Reset is admin-only.';
+                return;
+            }
+            if (!targetUsername) return;
+            const ok = confirm(`Reset progress for "${targetUsername}"? This clears MMR, wins, losses, money, charms, equipped charm, and daily progress. The account/password stay saved.`);
+            if (!ok) return;
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = `Resetting ${targetUsername}…`;
+            socket.emit('adminResetUser', { adminUsername: loggedInUser.username, targetUsername });
+        }
+
+        socket.on('adminResetUserSuccess', ({ targetUsername }) => {
+            if (targetUsername && loggedInUser && targetUsername === loggedInUser.username) {
+                resetLocalProgressAfterAdminReset();
+            }
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = `✅ Reset complete for ${targetUsername}.`;
+            if (typeof toast === 'function') toast(`↻ ${targetUsername} was reset.`, 'info');
+            socket.emit('adminGetUsers', { username: loggedInUser.username });
+        });
+
         socket.on('adminResetAllSuccess', ({ resetCount }) => {
             resetLocalProgressAfterAdminReset();
             const msg = document.getElementById('admin-msg');
@@ -1467,9 +1507,13 @@
             socket.emit('adminGetUsers', { username: loggedInUser.username });
         });
 
-        socket.on('profilesReset', ({ by } = {}) => {
-            resetLocalProgressAfterAdminReset();
-            if (typeof toast === 'function') toast(`🧨 Player progress reset${by ? ' by ' + by : ''}.`, 'lose');
+        socket.on('profilesReset', ({ by, targetUsername, all } = {}) => {
+            const shouldResetThisDevice = all || !targetUsername || (loggedInUser && targetUsername === loggedInUser.username);
+            if (shouldResetThisDevice) resetLocalProgressAfterAdminReset();
+            if (typeof toast === 'function') {
+                const label = all || !targetUsername ? 'All player progress' : `${targetUsername}'s progress`;
+                toast(`🧨 ${label} reset${by ? ' by ' + by : ''}.`, 'lose');
+            }
         });
 
         /* --- DAILY CHALLENGES --- */
