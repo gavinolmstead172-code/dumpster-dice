@@ -673,6 +673,19 @@
         .trade-mini-btn.accept { background:linear-gradient(180deg,#8BC34A,#558B2F); border-color:#33691E; }
         .trade-mini-btn.cancel { background:#B71C1C; border-color:#7f0000; }
         @media (max-width: 760px) { .trade-columns { grid-template-columns:1fr; } }
+        .trade-player-row { display:flex; align-items:center; justify-content:space-between; gap:10px; background:#111; border:2px solid #333; border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+        .trade-player-name { font-size:16px; font-weight:1000; color:#fff; display:flex; align-items:center; gap:8px; }
+        .trade-player-status { font-size:12px; color:#888; margin-top:2px; }
+        .trade-now-btn { background:linear-gradient(180deg,#00E5FF,#0277BD); border:2px solid #01579B; color:#fff; border-radius:10px; padding:8px 13px; font-weight:1000; cursor:pointer; }
+        .trade-now-btn:hover { filter:brightness(1.15); }
+        .roblox-trade-screen { background:#0b0b0b; border:3px solid #333; border-radius:16px; padding:14px; box-shadow:inset 0 0 18px rgba(0,0,0,0.7); }
+        .trade-money-box { margin-top:10px; background:#050505; border:2px solid #333; border-radius:10px; padding:10px; }
+        .trade-money-box label { display:block; color:#FFD740; font-weight:1000; font-size:13px; margin-bottom:6px; }
+        .trade-money-input { width:100%; box-sizing:border-box; background:#111; color:#FFD740; border:2px solid #555; border-radius:8px; padding:9px 10px; font-size:16px; font-weight:1000; outline:none; }
+        .trade-money-input:focus { border-color:#FFD740; box-shadow:0 0 10px rgba(255,215,0,0.35); }
+        .trade-money-display { margin-top:8px; color:#FFD740; font-weight:1000; font-size:15px; }
+        .trade-roblox-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; color:#aaa; font-size:13px; }
+        .trade-roblox-title b { color:#fff; }
 
     </style>
 </head>
@@ -793,7 +806,6 @@
                 <div id="lobby-player-list"></div>
                 <p id="lobby-waiting-msg">Waiting for the host to start...</p>
                 <button class="btn-large" id="lobby-start-btn" style="width:100%;margin-top:8px;display:none;" onclick="hostStartGame()">START GAME 🎲</button>
-                <button class="btn-large" style="width:100%;margin-top:8px;background:linear-gradient(180deg,#00E5FF,#0277BD);border-color:#01579B;box-shadow:0 6px 0 #01579B,0 10px 20px rgba(0,0,0,0.5);" onclick="openTradeMenu()">TRADE CHARMS 🔁</button>
                 <button class="lobby-back-btn" onclick="leaveLobby()">← Leave Lobby</button>
             </div>
 
@@ -882,7 +894,7 @@
 
             <h3 style="margin-bottom: 10px; color: #ddd; text-align: left;">Your Charms</h3>
             <div class="inventory-grid" id="inventory-grid"></div>
-            <button class="btn-large trade-shop-btn" style="width:100%;margin-top:14px;font-size:18px;padding:12px 18px;box-shadow:0 6px 0 #01579B,0 10px 20px rgba(0,0,0,0.5);" onclick="openTradeMenu()">TRADE CHARMS 🔁</button>
+            <button class="btn-large trade-shop-btn" style="width:100%;margin-top:14px;font-size:18px;padding:12px 18px;box-shadow:0 6px 0 #01579B,0 10px 20px rgba(0,0,0,0.5);" onclick="openTradeMenu()">TRADE PLAYERS 🔁</button>
             <div id="shop-message" style="height: 20px; margin-top: 10px; font-weight: bold; color: #8BC34A;"></div>
         </div>
 
@@ -903,7 +915,6 @@
                 <button id="taunt-btn" class="header-btn" onclick="toggleTauntMenu()">TAUNT 💬</button>
                 <div id="taunt-menu"></div>
             </div>
-            <button class="header-btn" id="trade-btn" onclick="openTradeMenu()">TRADE 🔁</button>
         </div>
 
         <div class="central-hub" id="hub">
@@ -941,6 +952,15 @@
             </div>
         </div>
     </div> 
+
+
+    <div id="trade-overlay" style="display:none;">
+        <div id="trade-box">
+            <h2 id="trade-title">Charm Trading 🔁</h2>
+            <div id="trade-content"></div>
+            <div id="trade-actions" class="trade-btn-row"></div>
+        </div>
+    </div>
     <div id="join-request-popup"></div>
     <div id="toast-stack"></div>
 
@@ -3137,17 +3157,20 @@
 
 
 
-        /* --- ADOPT-ME STYLE CHARM TRADING --- */
+        /* --- MAIN MENU ROBLOX-STYLE CHARM TRADING --- */
         let activeTrade = null;
         let tradeMyOfferIndices = [];
         let tradeTheirOfferItems = [];
         let tradeReadyMe = false;
         let tradeReadyThem = false;
+        let tradeMoneyOffer = 0;
+        let tradeTheirMoneyOffer = 0;
+        let onlineTradePlayers = [];
 
         function getTradeNameColor() {
             const lobbyMe = lobbyPlayerList.find(p => p.socketId === mySocketId);
             if (lobbyMe) return { name: lobbyMe.name, color: lobbyMe.color || '#fff' };
-            return { name: loggedInUser?.username || 'Player', color: '#fff' };
+            return { name: loggedInUser?.username || 'Player', color: '#00E5FF' };
         }
 
         function openTradeMenu() {
@@ -3156,20 +3179,45 @@
             const actions = document.getElementById('trade-actions');
             if (!overlay || !content || !actions) return;
             overlay.style.display = 'flex';
-            document.getElementById('trade-title').innerText = 'Charm Trading 🔁';
-            if (!isLobbyGame && lobbyPlayerList.length <= 1) {
-                content.innerHTML = `<div class="trade-warn">Trading works with players in an online lobby/game. Join or create an online lobby first.</div>`;
-                actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
-                return;
-            }
-            const others = lobbyPlayerList.filter(p => p.socketId !== mySocketId);
-            if (others.length === 0) {
-                content.innerHTML = `<div class="trade-warn">No other players are available to trade with yet.</div>`;
-                actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
-                return;
-            }
-            content.innerHTML = `<div class="trade-sub">Pick a player to request a charm trade:</div><div class="trade-player-grid">${others.map(p => `<button class="trade-player-btn" onclick="requestTrade('${p.socketId}')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.color || '#fff'};margin-right:6px;"></span>${p.name}</button>`).join('')}</div>`;
+            document.getElementById('trade-title').innerText = 'Player Trading 🔁';
+            content.innerHTML = `<div class="trade-warn">Loading online players...</div>`;
             actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+            socket.emit('getTradePlayers');
+        }
+
+        socket.on('tradePlayers', (playersList = []) => {
+            onlineTradePlayers = Array.isArray(playersList) ? playersList : [];
+            renderTradePlayerList();
+        });
+
+        function renderTradePlayerList() {
+            const content = document.getElementById('trade-content');
+            const actions = document.getElementById('trade-actions');
+            if (!content || !actions) return;
+            document.getElementById('trade-title').innerText = 'Player Trading 🔁';
+            if (!loggedInUser) {
+                content.innerHTML = `<div class="trade-warn">Sign in first to trade with other players.</div>`;
+                actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+                return;
+            }
+            if (!onlineTradePlayers.length) {
+                content.innerHTML = `<div class="trade-warn">No other signed-in players are online right now.</div>`;
+                actions.innerHTML = `<button class="trade-mini-btn" onclick="openTradeMenu()">Refresh</button><button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+                return;
+            }
+            content.innerHTML = `<div class="trade-sub">Online players:</div>` + onlineTradePlayers.map(p => `
+                <div class="trade-player-row">
+                    <div>
+                        <div class="trade-player-name"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${p.color || '#00E5FF'};"></span>${escapeHtml(p.name || 'Player')}</div>
+                        <div class="trade-player-status">${p.inGame ? 'In game' : p.inLobby ? 'In lobby' : 'Main menu'}${p.roomName ? ' · ' + escapeHtml(p.roomName) : ''}</div>
+                    </div>
+                    <button class="trade-now-btn" onclick="requestTrade('${p.socketId}')">Trade</button>
+                </div>`).join('');
+            actions.innerHTML = `<button class="trade-mini-btn" onclick="openTradeMenu()">Refresh</button><button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+        }
+
+        function escapeHtml(str) {
+            return String(str || '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
         }
 
         function closeTradeOverlay() {
@@ -3182,6 +3230,7 @@
             socket.emit('tradeRequest', { toSocketId, fromName: me.name, fromColor: me.color });
             const content = document.getElementById('trade-content');
             const actions = document.getElementById('trade-actions');
+            document.getElementById('trade-title').innerText = 'Trade Request Sent 🔁';
             if (content) content.innerHTML = `<div class="trade-warn">Trade request sent. Waiting for them to accept...</div>`;
             if (actions) actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="cancelTrade()">Cancel</button>`;
             toast('Trade request sent 🔁', 'info');
@@ -3194,8 +3243,9 @@
             if (!overlay || !content || !actions) return;
             overlay.style.display = 'flex';
             document.getElementById('trade-title').innerText = 'Trade Request 🔁';
-            content.innerHTML = `<div class="trade-sub"><b style="color:${fromColor || '#fff'}">${fromName}</b> wants to trade charms with you.</div><div class="trade-warn">Adopt Me rule: both players must ready up before anything moves.</div>`;
+            content.innerHTML = `<div class="trade-sub"><b style="color:${fromColor || '#fff'}">${escapeHtml(fromName)}</b> wants to trade with you.</div><div class="trade-warn">You can trade charms, money, or both. Both players must ready up before anything moves.</div>`;
             actions.innerHTML = `<button class="trade-mini-btn accept" onclick="respondTrade('${tradeId}', true)">Accept</button><button class="trade-mini-btn cancel" onclick="respondTrade('${tradeId}', false)">Decline</button>`;
+            toast(`${fromName} wants to trade 🔁`, 'info');
             if (sfxEnabled) sfxClaim();
         });
 
@@ -3210,9 +3260,25 @@
             tradeTheirOfferItems = [];
             tradeReadyMe = false;
             tradeReadyThem = false;
+            tradeMoneyOffer = 0;
+            tradeTheirMoneyOffer = 0;
             renderTradeWindow();
             toast(`Trading with ${partner.name} 🔁`, 'info');
         });
+
+        function getTradeOfferItems() {
+            return tradeMyOfferIndices.map(i => normalizeCharmItem(playerInventory[i])).filter(Boolean);
+        }
+
+        function sendTradeOfferUpdate() {
+            if (!activeTrade) return;
+            tradeReadyMe = false;
+            socket.emit('tradeOfferUpdate', {
+                tradeId: activeTrade.id,
+                offerItems: getTradeOfferItems(),
+                moneyOffer: tradeMoneyOffer
+            });
+        }
 
         function renderTradeWindow() {
             if (!activeTrade) return;
@@ -3223,17 +3289,55 @@
             overlay.style.display = 'flex';
             document.getElementById('trade-title').innerText = `Trading with ${activeTrade.partner.name}`;
             playerInventory = normalizeInventoryList(playerInventory);
+
             const myItems = playerInventory.map((item, idx) => {
                 const emoji = getCharmEmoji(item), wear = getWearInfo(item), rarity = getCharmRarityInfo(emoji);
                 const selected = tradeMyOfferIndices.includes(idx);
                 return `<div class="trade-item ${rarity.class} ${wear.className} ${selected ? 'selected' : ''}" title="${emoji} • ${wear.label}" onclick="toggleTradeItem(${idx})"><span>${emoji}</span><span class="wear-tag">${wear.short}</span></div>`;
             }).join('') || '<div style="color:#777;">No charms to offer.</div>';
+
             const theirItems = tradeTheirOfferItems.map(item => {
                 const normalized = normalizeCharmItem(item), emoji = getCharmEmoji(normalized), wear = getWearInfo(normalized), rarity = getCharmRarityInfo(emoji);
                 return `<div class="trade-item locked ${rarity.class} ${wear.className}" title="${emoji} • ${wear.label}"><span>${emoji}</span><span class="wear-tag">${wear.short}</span></div>`;
             }).join('') || '<div style="color:#777;">Waiting for their offer...</div>';
-            content.innerHTML = `<div class="trade-columns"><div class="trade-column"><h3>Your Offer</h3><div class="trade-inv-grid">${myItems}</div><div class="trade-ready">${tradeReadyMe ? '✅ You are ready' : 'Pick charms, then ready up'}</div></div><div class="trade-column"><h3>${activeTrade.partner.name}'s Offer</h3><div class="trade-inv-grid">${theirItems}</div><div class="trade-ready">${tradeReadyThem ? '✅ They are ready' : 'Waiting for ready...'}</div></div></div><div class="trade-warn">Tip: wear tags are like CS:GO skins — FN, MW, FT, WW, BS. Battle-Scarred is the roughest.</div>`;
+
+            content.innerHTML = `
+                <div class="roblox-trade-screen">
+                    <div class="trade-roblox-title"><span>Classic two-sided trade</span><b>Your wallet: $${playerMoney}</b></div>
+                    <div class="trade-columns">
+                        <div class="trade-column">
+                            <h3>Your Offer</h3>
+                            <div class="trade-inv-grid">${myItems}</div>
+                            <div class="trade-money-box">
+                                <label>Money Offer</label>
+                                <input class="trade-money-input" type="number" min="0" max="${playerMoney}" value="${tradeMoneyOffer}" oninput="updateTradeMoney(this.value)">
+                                <div class="trade-money-display">Offering: $${tradeMoneyOffer}</div>
+                            </div>
+                            <div class="trade-ready">${tradeReadyMe ? '✅ You are ready' : 'Pick charms / money, then ready up'}</div>
+                        </div>
+                        <div class="trade-column">
+                            <h3>${escapeHtml(activeTrade.partner.name)}'s Offer</h3>
+                            <div class="trade-inv-grid">${theirItems}</div>
+                            <div class="trade-money-box">
+                                <label>Their Money Offer</label>
+                                <div class="trade-money-display">$${tradeTheirMoneyOffer}</div>
+                            </div>
+                            <div class="trade-ready">${tradeReadyThem ? '✅ They are ready' : 'Waiting for ready...'}</div>
+                        </div>
+                    </div>
+                    <div class="trade-warn">Roblox-style rule: changing charms or money un-readies you. Only click Ready when the offer looks right.</div>
+                </div>`;
             actions.innerHTML = `<button class="trade-mini-btn accept" onclick="readyTrade()" ${tradeReadyMe ? 'disabled style="opacity:0.5"' : ''}>✅ Ready</button><button class="trade-mini-btn cancel" onclick="cancelTrade()">Cancel Trade</button>`;
+        }
+
+        function updateTradeMoney(value) {
+            if (!activeTrade || tradeReadyMe) return;
+            let amount = Math.floor(Number(value) || 0);
+            if (amount < 0) amount = 0;
+            if (amount > playerMoney) amount = playerMoney;
+            tradeMoneyOffer = amount;
+            sendTradeOfferUpdate();
+            renderTradeWindow();
         }
 
         function toggleTradeItem(index) {
@@ -3242,17 +3346,24 @@
             if (pos >= 0) tradeMyOfferIndices.splice(pos, 1);
             else if (tradeMyOfferIndices.length < 12) tradeMyOfferIndices.push(index);
             else { toast('Max 12 charms per trade.', 'out'); return; }
-            tradeReadyMe = false;
-            const offerItems = tradeMyOfferIndices.map(i => normalizeCharmItem(playerInventory[i])).filter(Boolean);
-            socket.emit('tradeOfferUpdate', { tradeId: activeTrade.id, offerItems });
+            sendTradeOfferUpdate();
             renderTradeWindow();
         }
 
         function readyTrade() {
             if (!activeTrade) return;
+            if (tradeMoneyOffer > playerMoney) {
+                tradeMoneyOffer = playerMoney;
+                renderTradeWindow();
+                toast('You cannot offer more money than you have.', 'lose');
+                return;
+            }
             tradeReadyMe = true;
-            const offerItems = tradeMyOfferIndices.map(i => normalizeCharmItem(playerInventory[i])).filter(Boolean);
-            socket.emit('tradeReady', { tradeId: activeTrade.id, offerItems });
+            socket.emit('tradeReady', {
+                tradeId: activeTrade.id,
+                offerItems: getTradeOfferItems(),
+                moneyOffer: tradeMoneyOffer
+            });
             renderTradeWindow();
         }
 
@@ -3263,22 +3374,30 @@
             tradeTheirOfferItems = [];
             tradeReadyMe = false;
             tradeReadyThem = false;
+            tradeMoneyOffer = 0;
+            tradeTheirMoneyOffer = 0;
             closeTradeOverlay();
         }
 
-        socket.on('tradeOfferUpdate', ({ offerItems, ready }) => {
+        socket.on('tradeOfferUpdate', ({ offerItems, ready, moneyOffer }) => {
             tradeTheirOfferItems = normalizeInventoryList(offerItems || []);
+            tradeTheirMoneyOffer = Math.max(0, Math.floor(Number(moneyOffer) || 0));
             tradeReadyThem = !!ready;
             renderTradeWindow();
         });
 
-        socket.on('tradeReadyUpdate', ({ youReady, themReady }) => {
+        socket.on('tradeReadyUpdate', ({ youReady, themReady, theirMoneyOffer }) => {
             if (typeof youReady === 'boolean') tradeReadyMe = youReady;
             if (typeof themReady === 'boolean') tradeReadyThem = themReady;
+            if (typeof theirMoneyOffer !== 'undefined') tradeTheirMoneyOffer = Math.max(0, Math.floor(Number(theirMoneyOffer) || 0));
             renderTradeWindow();
         });
 
-        socket.on('tradeComplete', ({ receiveItems }) => {
+        socket.on('tradeComplete', ({ receiveItems, receiveMoney }) => {
+            const outgoingMoney = Math.min(playerMoney, Math.max(0, Math.floor(Number(tradeMoneyOffer) || 0)));
+            playerMoney -= outgoingMoney;
+            playerMoney += Math.max(0, Math.floor(Number(receiveMoney) || 0));
+
             const offered = [...tradeMyOfferIndices].sort((a,b) => b-a);
             offered.forEach(i => { if (i >= 0 && i < playerInventory.length) playerInventory.splice(i, 1); });
             const incoming = normalizeInventoryList(receiveItems || []);
@@ -3286,14 +3405,15 @@
             if (equippedCharm && !hasCharmEmoji(equippedCharm)) equippedCharm = null;
             saveEconomy();
             updateShopUI();
-            activeTrade = null; tradeMyOfferIndices = []; tradeTheirOfferItems = []; tradeReadyMe = false; tradeReadyThem = false;
+            const moneyMsg = receiveMoney ? ` and $${receiveMoney}` : '';
+            activeTrade = null; tradeMyOfferIndices = []; tradeTheirOfferItems = []; tradeReadyMe = false; tradeReadyThem = false; tradeMoneyOffer = 0; tradeTheirMoneyOffer = 0;
             closeTradeOverlay();
-            toast(`Trade complete! Received ${incoming.length} charm(s).`, 'win');
+            toast(`Trade complete! Received ${incoming.length} charm(s)${moneyMsg}.`, 'win');
             if (sfxEnabled) sfxPotWin();
         });
 
         socket.on('tradeCancelled', ({ reason }) => {
-            activeTrade = null; tradeMyOfferIndices = []; tradeTheirOfferItems = []; tradeReadyMe = false; tradeReadyThem = false;
+            activeTrade = null; tradeMyOfferIndices = []; tradeTheirOfferItems = []; tradeReadyMe = false; tradeReadyThem = false; tradeMoneyOffer = 0; tradeTheirMoneyOffer = 0;
             closeTradeOverlay();
             toast(reason || 'Trade cancelled.', 'out');
         });
