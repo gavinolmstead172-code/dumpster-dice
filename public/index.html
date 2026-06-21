@@ -1213,6 +1213,56 @@
             msgs.scrollTop = msgs.scrollHeight;
         });
 
+
+        socket.on('gameFx', (fx = {}) => {
+            if (!fx || amIHost) return;
+
+            if (fx.type === 'spinnerStart') {
+                const overlay = document.getElementById('spinner-overlay');
+                if (overlay) overlay.style.display = 'flex';
+                isProcessing = true;
+                return;
+            }
+
+            if (fx.type === 'spinnerTick') {
+                const overlay = document.getElementById('spinner-overlay');
+                const resultBox = document.getElementById('spinner-result');
+                if (overlay) overlay.style.display = 'flex';
+                if (resultBox) {
+                    resultBox.innerText = fx.name || 'Rolling...';
+                    resultBox.style.color = fx.color || '#fff';
+                    resultBox.style.borderColor = fx.color || '#8BC34A';
+                    resultBox.style.boxShadow = `0 0 40px ${(fx.color || '#8BC34A')}88`;
+                }
+                if (sfxEnabled) sfxSpin();
+                return;
+            }
+
+            if (fx.type === 'spinnerEnd') {
+                const overlay = document.getElementById('spinner-overlay');
+                if (overlay) overlay.style.display = 'none';
+                isProcessing = false;
+                if (typeof fx.currentPlayer === 'number') currentPlayer = fx.currentPlayer;
+                if (fx.message) logAction(fx.message);
+                render();
+                return;
+            }
+
+            if (fx.type === 'roll') {
+                if (typeof fx.playerIndex === 'number' && players[fx.playerIndex]) {
+                    spawnRollAnimation(fx.roll, fx.playerIndex);
+                }
+                return;
+            }
+
+            if (fx.type === 'taunt') {
+                const displayText = fx.message || fx.text || '💬 Taunt!';
+                if (sfxEnabled) sfxTaunt(fx.vibe === 'loud');
+                showTauntBurst(displayText, fx.vibe || 'plain');
+                toast(`${fx.name || 'Player'}: ${fx.text || displayText}`, fx.vibe === 'toxic' ? 'lose' : 'info');
+            }
+        });
+
         /* --- GAME RULES SYSTEM --- */
         const modeRules = {
             'basic': "<span class='rules-title'>Basic Game</span><br>Take turns rolling! Claim an empty slot matching your roll. If you roll a number already claimed, your dice goes straight to the Dumpster! First to clear board gets the Pot (+6). Last player with dice wins!",
@@ -1966,7 +2016,17 @@
             if (sfxEnabled) sfxTaunt(taunt.vibe === 'loud');
             showTauntBurst(message, taunt.vibe);
             toast(`${speaker.name}: ${taunt.text}`, taunt.vibe === 'toxic' ? 'lose' : 'info');
-            if (isLobbyGame) socket.emit('chatMessage', { name: speaker.name, color: speaker.color, text: message });
+            if (isLobbyGame) {
+                socket.emit('gameFx', {
+                    type: 'taunt',
+                    name: speaker.name,
+                    color: speaker.color,
+                    text: taunt.text,
+                    message,
+                    vibe: taunt.vibe
+                });
+                socket.emit('chatMessage', { name: speaker.name, color: speaker.color, text: message });
+            }
             else addSystemChat(`${speaker.name}: ${message}`);
         }
 
@@ -2312,15 +2372,30 @@
 
         function runSpinner() {
             isProcessing = true;
-            const overlay = document.getElementById('spinner-overlay'); const resultBox = document.getElementById('spinner-result');
-            overlay.style.display = 'flex'; let spins = 0; let maxSpins = 20 + Math.floor(Math.random() * 10); let interval = 50;
+            const overlay = document.getElementById('spinner-overlay');
+            const resultBox = document.getElementById('spinner-result');
+            overlay.style.display = 'flex';
+            if (amIHost && isLobbyGame) socket.emit('gameFx', { type: 'spinnerStart' });
+            let spins = 0;
+            let maxSpins = 20 + Math.floor(Math.random() * 10);
+            let interval = 50;
 
             function spinStep() {
                 if(!gameActive) return; 
                 currentPlayer = (currentPlayer + 1) % players.length;
                 let p = players[currentPlayer];
                 resultBox.innerText = p.name;
-                resultBox.style.color = p.color; resultBox.style.borderColor = p.color; resultBox.style.boxShadow = `0 0 40px ${p.color}88`;
+                resultBox.style.color = p.color;
+                resultBox.style.borderColor = p.color;
+                resultBox.style.boxShadow = `0 0 40px ${p.color}88`;
+                if (amIHost && isLobbyGame) {
+                    socket.emit('gameFx', {
+                        type: 'spinnerTick',
+                        currentPlayer,
+                        name: p.name,
+                        color: p.color
+                    });
+                }
                 sfxSpin(); spins++;
                 
                 if (spins < maxSpins) { interval += 5; setTimeout(spinStep, interval); } 
@@ -2328,7 +2403,15 @@
                     setTimeout(() => {
                         if(!gameActive) return;
                         overlay.style.display = 'none'; isProcessing = false;
-                        logAction(`Game started! ${players[currentPlayer].name} is up.`);
+                        const startMsg = `Game started! ${players[currentPlayer].name} is up.`;
+                        logAction(startMsg);
+                        if (amIHost && isLobbyGame) {
+                            socket.emit('gameFx', {
+                                type: 'spinnerEnd',
+                                currentPlayer,
+                                message: startMsg
+                            });
+                        }
                         render(); updateControls(); checkBotTurn();
                     }, 1500);
                 }
@@ -2523,6 +2606,13 @@
             if (!p.isBot) progressChallenge('roll_25', 1);
 
             render(); spawnRollAnimation(roll, actingPlayerId);
+            if (amIHost && isLobbyGame && p.isBot) {
+                socket.emit('gameFx', {
+                    type: 'roll',
+                    roll,
+                    playerIndex: actingPlayerId
+                });
+            }
 
             setTimeout(() => {
                 if(!gameActive) return;
@@ -2686,6 +2776,7 @@
 
                 if (isHumanWinner && earnedMoney > 0) { playerMoney += earnedMoney; progressChallenge('earn_500', earnedMoney); saveEconomy(); }
                 loadStats(); syncProfile();
+                if (isLobbyGame) socket.emit('getLeaderboard');
 
                 document.getElementById('roll-btn').style.display = 'none';
                 document.getElementById('game-over-controls').style.display = 'block';
