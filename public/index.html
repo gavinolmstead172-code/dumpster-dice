@@ -608,6 +608,49 @@
             100% { transform: translateX(-50%) scale(0.92) translateY(-20px); opacity: 0; }
         }
 
+
+        /* --- EXTRA CASE + WEAR + TRADING SYSTEM --- */
+        .case-legendary { background: linear-gradient(145deg, #FF7043, #D84315); border-color: #FFAB91; }
+        .case-mythic { background: linear-gradient(145deg, #EC407A, #AD1457); border-color: #F48FB1; }
+        .case-galaxy { background: linear-gradient(145deg, #26C6DA, #4527A0); border-color: #84FFFF; }
+        .charm-legendary { border-color: #D84315 !important; box-shadow: 0 0 8px rgba(255,112,67,0.7); }
+        .charm-mythic { border-color: #AD1457 !important; box-shadow: 0 0 10px rgba(236,64,122,0.75); }
+        .charm-galaxy { border-color: #26C6DA !important; box-shadow: 0 0 12px rgba(38,198,218,0.9); }
+        .wear-tag { position: absolute; right: -7px; bottom: -7px; font-size: 9px; font-weight: 1000; background:#000; color:#fff; border:1px solid #555; border-radius: 999px; padding: 2px 4px; line-height: 1; }
+        .wear-fn { border-color:#B9F2FF !important; }
+        .wear-mw { box-shadow: inset 0 0 8px rgba(139,195,74,0.35); }
+        .wear-ft { filter: saturate(0.95); }
+        .wear-ww { filter: saturate(0.8) brightness(0.9); }
+        .wear-bs { filter: grayscale(0.25) brightness(0.82); }
+        #trade-btn { background: linear-gradient(180deg,#00E5FF,#0277BD); border-color:#01579B; }
+        #trade-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.93); z-index: 9500; display: none;
+            align-items: center; justify-content: center; padding: 20px; box-sizing: border-box;
+        }
+        #trade-box {
+            width: min(920px, 95vw); max-height: 88vh; overflow-y: auto; background: linear-gradient(145deg,#202020,#101010);
+            border: 4px solid #00E5FF; border-radius: 20px; padding: 22px; box-shadow: 0 0 45px rgba(0,229,255,0.28), 0 20px 40px rgba(0,0,0,0.85);
+        }
+        #trade-box h2 { color:#00E5FF; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:2px; }
+        .trade-sub { color:#aaa; font-size:14px; margin-bottom:14px; }
+        .trade-player-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin: 12px 0; }
+        .trade-player-btn { background:#111; border:2px solid #333; color:#fff; border-radius:12px; padding:12px; cursor:pointer; text-align:left; font-weight:900; }
+        .trade-player-btn:hover { border-color:#00E5FF; transform: translateY(-2px); }
+        .trade-columns { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+        .trade-column { background:#111; border:2px solid #333; border-radius:14px; padding:12px; min-height:180px; }
+        .trade-column h3 { margin:0 0 8px 0; color:#fff; font-size:16px; }
+        .trade-inv-grid { display:flex; flex-wrap:wrap; gap:8px; }
+        .trade-item { width:54px; height:54px; background:#242424; border:2px solid #555; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px; cursor:pointer; position:relative; }
+        .trade-item.selected { background:#004D40; border-color:#00E676 !important; box-shadow: 0 0 14px rgba(0,230,118,0.75); }
+        .trade-item.locked { cursor:default; opacity:0.92; }
+        .trade-ready { color:#8BC34A; font-weight:1000; font-size:13px; min-height:18px; }
+        .trade-warn { color:#FFD740; font-size:12px; line-height:1.4; margin-top:8px; }
+        .trade-btn-row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:14px; }
+        .trade-mini-btn { background:#333; color:#fff; border:2px solid #555; border-radius:10px; padding:10px 14px; font-weight:900; cursor:pointer; }
+        .trade-mini-btn.accept { background:linear-gradient(180deg,#8BC34A,#558B2F); border-color:#33691E; }
+        .trade-mini-btn.cancel { background:#B71C1C; border-color:#7f0000; }
+        @media (max-width: 760px) { .trade-columns { grid-template-columns:1fr; } }
+
     </style>
 </head>
 <body>
@@ -727,6 +770,7 @@
                 <div id="lobby-player-list"></div>
                 <p id="lobby-waiting-msg">Waiting for the host to start...</p>
                 <button class="btn-large" id="lobby-start-btn" style="width:100%;margin-top:8px;display:none;" onclick="hostStartGame()">START GAME 🎲</button>
+                <button class="btn-large" style="width:100%;margin-top:8px;background:linear-gradient(180deg,#00E5FF,#0277BD);border-color:#01579B;box-shadow:0 6px 0 #01579B,0 10px 20px rgba(0,0,0,0.5);" onclick="openTradeMenu()">TRADE CHARMS 🔁</button>
                 <button class="lobby-back-btn" onclick="leaveLobby()">← Leave Lobby</button>
             </div>
 
@@ -794,13 +838,22 @@
 
             <div class="shop-cases">
                 <button class="case-btn case-common" onclick="buyCase(25)">Common Case<br>$25
-                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💩 40%</div><div>🪰 25%</div><div>🧻 17%</div><div>🍌 11%</div><div>🐟 6%</div></div><div class="tooltip-chase">1% Chance: 👽</div></div>
+                    <div class="case-tooltip"><div class="tooltip-title">Dumpster Pool</div><div class="tooltip-pool"><div>💩</div><div>🪰</div><div>🧻</div><div>🍌</div><div>🐟</div><div>🧃</div><div>🥫</div><div>🪥</div></div><div class="tooltip-chase">Chase: 👽</div></div>
                 </button>
                 <button class="case-btn case-rare" onclick="buyCase(50)">Rare Case<br>$50
-                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>🍔 40%</div><div>🍕 25%</div><div>🌭 17%</div><div>🌮 11%</div><div>🍟 6%</div></div><div class="tooltip-chase">1% Chance: 🦖</div></div>
+                    <div class="case-tooltip"><div class="tooltip-title">Snack Pool</div><div class="tooltip-pool"><div>🍔</div><div>🍕</div><div>🌭</div><div>🌮</div><div>🍟</div><div>🥤</div><div>🍩</div><div>🥨</div></div><div class="tooltip-chase">Chase: 🦖</div></div>
                 </button>
                 <button class="case-btn case-epic" onclick="buyCase(100)">Epic Case<br>$100
-                    <div class="case-tooltip"><div class="tooltip-title">Standard Pool</div><div class="tooltip-pool"><div>💎 40%</div><div>👑 25%</div><div>🏆 17%</div><div>🌟 11%</div><div>🌈 6%</div></div><div class="tooltip-chase">1% Chance: 🌌</div></div>
+                    <div class="case-tooltip"><div class="tooltip-title">Treasure Pool</div><div class="tooltip-pool"><div>💎</div><div>👑</div><div>🏆</div><div>🌟</div><div>🌈</div><div>⚡</div><div>🪙</div><div>🎲</div></div><div class="tooltip-chase">Chase: 🌌</div></div>
+                </button>
+                <button class="case-btn case-legendary" onclick="buyCase(150)">Legendary Case<br>$150
+                    <div class="case-tooltip"><div class="tooltip-title">Beast Pool</div><div class="tooltip-pool"><div>🐲</div><div>🦅</div><div>🦁</div><div>🐺</div><div>🦂</div><div>🦈</div><div>🦍</div><div>🦇</div></div><div class="tooltip-chase">Chase: 🐉</div></div>
+                </button>
+                <button class="case-btn case-mythic" onclick="buyCase(250)">Mythic Case<br>$250
+                    <div class="case-tooltip"><div class="tooltip-title">Element Pool</div><div class="tooltip-pool"><div>🔥</div><div>❄️</div><div>🌪️</div><div>🌊</div><div>🌋</div><div>☄️</div><div>🧊</div><div>🌩️</div></div><div class="tooltip-chase">Chase: 🧿</div></div>
+                </button>
+                <button class="case-btn case-galaxy" onclick="buyCase(500)">Galaxy Case<br>$500
+                    <div class="case-tooltip"><div class="tooltip-title">Space Pool</div><div class="tooltip-pool"><div>🪐</div><div>🚀</div><div>🛸</div><div>🌙</div><div>☀️</div><div>⭐</div><div>🛰️</div><div>🌠</div></div><div class="tooltip-chase">Chase: 👾</div></div>
                 </button>
             </div>
 
@@ -826,6 +879,7 @@
                 <button id="taunt-btn" class="header-btn" onclick="toggleTauntMenu()">TAUNT 💬</button>
                 <div id="taunt-menu"></div>
             </div>
+            <button class="header-btn" id="trade-btn" onclick="openTradeMenu()">TRADE 🔁</button>
         </div>
 
         <div class="central-hub" id="hub">
@@ -974,7 +1028,7 @@
             stats[profile.username] = { mmr: profile.mmr, wins: profile.wins, losses: profile.losses };
             localStorage.setItem('dumpsterStats', JSON.stringify(stats));
             localStorage.setItem('dumpsterMoney', profile.money);
-            localStorage.setItem('dumpsterInventory', JSON.stringify(profile.inventory));
+            localStorage.setItem('dumpsterInventory', JSON.stringify(normalizeInventoryList(profile.inventory)));
             if (profile.equippedCharm) localStorage.setItem('dumpsterEquippedCharm', profile.equippedCharm);
             else localStorage.removeItem('dumpsterEquippedCharm');
         }
@@ -1432,8 +1486,8 @@
                 secretMrkBuffer += char;
                 if (secretMrkBuffer.length > 3) secretMrkBuffer = secretMrkBuffer.slice(-3);
                 if (secretMrkBuffer === "mrk") {
-                    if (!playerInventory.includes('🤖')) {
-                        playerInventory.push('🤖');
+                    if (!hasCharmEmoji('🤖')) {
+                        playerInventory.push(makeCharmItem('🤖', 'FN'));
                         saveEconomy();
                         updateShopUI();
                         if(sfxEnabled) sfxClaim();
@@ -1476,7 +1530,7 @@
 
         function getTierAssist(mmr) {
             const rank = getRank(mmr || 0);
-            const values = [0.90, 0.70, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00];
+            const values = [0.90, 0.70, 0.50, 0.30, 0.10, 0.00, 0.00, -0.10];
             const tierIndex = Math.max(0, Math.min(rank.index || 0, values.length - 1));
             return { value: values[tierIndex] ?? 0, rank };
         }
@@ -1537,7 +1591,9 @@
             playerInventory.forEach((charm, index) => {
                 const pill = document.createElement('div');
                 pill.className = 'god-charm-pill';
-                pill.innerHTML = `<span>${charm}</span><button class="god-charm-remove" title="Remove" onclick="godRemoveCharm(${index})">×</button>`;
+                const emoji = getCharmEmoji(charm);
+                const wear = getWearInfo(charm);
+                pill.innerHTML = `<span>${emoji}</span><span style="font-size:10px;color:#aaa;font-weight:900;">${wear.short}</span><button class="god-charm-remove" title="Remove" onclick="godRemoveCharm(${index})">×</button>`;
                 list.appendChild(pill);
             });
         }
@@ -1599,7 +1655,7 @@
         function godUnlockAllCharms() {
             if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
             getAllGameCharms().forEach(charm => {
-                if (!playerInventory.includes(charm)) playerInventory.push(charm);
+                if (!hasCharmEmoji(charm)) playerInventory.push(makeCharmItem(charm, 'FN'));
             });
             saveEconomy();
             updateShopUI();
@@ -1807,6 +1863,64 @@
             });
         }
 
+
+        /* --- CHARM WEAR SYSTEM --- */
+        const wearTiers = [
+            { key: 'FN', label: 'Factory New', short: 'FN', className: 'wear-fn' },
+            { key: 'MW', label: 'Minimal Wear', short: 'MW', className: 'wear-mw' },
+            { key: 'FT', label: 'Field-Tested', short: 'FT', className: 'wear-ft' },
+            { key: 'WW', label: 'Well-Worn', short: 'WW', className: 'wear-ww' },
+            { key: 'BS', label: 'Battle-Scarred', short: 'BS', className: 'wear-bs' }
+        ];
+
+        function rollWearKey() {
+            const roll = Math.random() * 100;
+            if (roll < 8) return 'FN';
+            if (roll < 26) return 'MW';
+            if (roll < 61) return 'FT';
+            if (roll < 86) return 'WW';
+            return 'BS';
+        }
+
+        function getWearInfo(item) {
+            const key = (typeof item === 'object' && item ? item.wear : null) || 'FT';
+            return wearTiers.find(w => w.key === key) || wearTiers[2];
+        }
+
+        function makeCharmItem(charm, wearKey = null) {
+            return {
+                charm,
+                wear: wearKey || rollWearKey(),
+                uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`
+            };
+        }
+
+        function getCharmEmoji(item) {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') return item.charm || item.c || '?';
+            return '?';
+        }
+
+        function normalizeCharmItem(item) {
+            if (typeof item === 'string') return makeCharmItem(item, 'FT');
+            if (item && typeof item === 'object') {
+                return {
+                    charm: item.charm || item.c || '?',
+                    wear: (wearTiers.some(w => w.key === item.wear) ? item.wear : 'FT'),
+                    uid: item.uid || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+                };
+            }
+            return makeCharmItem('?','FT');
+        }
+
+        function normalizeInventoryList(list) {
+            return (Array.isArray(list) ? list : []).map(normalizeCharmItem).filter(item => item.charm && item.charm !== '?');
+        }
+
+        function hasCharmEmoji(charm) {
+            return normalizeInventoryList(playerInventory).some(item => getCharmEmoji(item) === charm);
+        }
+
         /* --- ECONOMY & CHARMS SYSTEM --- */
         let playerMoney = 0;
         let playerInventory = [];
@@ -1814,24 +1928,22 @@
         let pendingRefund = 0;
 
         const cases = {
-            25:  { cost: 25, pool: [{c:'💩', p: 40}, {c:'🪰', p: 25}, {c:'🧻', p: 17}, {c:'🍌', p: 11}, {c:'🐟', p: 6}], chase: '👽' },
-            50:  { cost: 50, pool: [{c:'🍔', p: 40}, {c:'🍕', p: 25}, {c:'🌭', p: 17}, {c:'🌮', p: 11}, {c:'🍟', p: 6}], chase: '🦖' },
-            100: { cost: 100, pool: [{c:'💎', p: 40}, {c:'👑', p: 25}, {c:'🏆', p: 17}, {c:'🌟', p: 11}, {c:'🌈', p: 6}], chase: '🌌' }
+            25:  { cost: 25,  name: 'Common Case',    className: 'charm-common',    pool: [{c:'💩', p: 26}, {c:'🪰', p: 20}, {c:'🧻', p: 16}, {c:'🍌', p: 12}, {c:'🐟', p: 9}, {c:'🧃', p: 7}, {c:'🥫', p: 5}, {c:'🪥', p: 4}], chase: '👽' },
+            50:  { cost: 50,  name: 'Rare Case',      className: 'charm-rare',      pool: [{c:'🍔', p: 26}, {c:'🍕', p: 20}, {c:'🌭', p: 16}, {c:'🌮', p: 12}, {c:'🍟', p: 9}, {c:'🥤', p: 7}, {c:'🍩', p: 5}, {c:'🥨', p: 4}], chase: '🦖' },
+            100: { cost: 100, name: 'Epic Case',      className: 'charm-epic',      pool: [{c:'💎', p: 26}, {c:'👑', p: 20}, {c:'🏆', p: 16}, {c:'🌟', p: 12}, {c:'🌈', p: 9}, {c:'⚡', p: 7}, {c:'🪙', p: 5}, {c:'🎲', p: 4}], chase: '🌌' },
+            150: { cost: 150, name: 'Legendary Case', className: 'charm-legendary', pool: [{c:'🐲', p: 26}, {c:'🦅', p: 20}, {c:'🦁', p: 16}, {c:'🐺', p: 12}, {c:'🦂', p: 9}, {c:'🦈', p: 7}, {c:'🦍', p: 5}, {c:'🦇', p: 4}], chase: '🐉' },
+            250: { cost: 250, name: 'Mythic Case',    className: 'charm-mythic',    pool: [{c:'🔥', p: 26}, {c:'❄️', p: 20}, {c:'🌪️', p: 16}, {c:'🌊', p: 12}, {c:'🌋', p: 9}, {c:'☄️', p: 7}, {c:'🧊', p: 5}, {c:'🌩️', p: 4}], chase: '🧿' },
+            500: { cost: 500, name: 'Galaxy Case',    className: 'charm-galaxy',    pool: [{c:'🪐', p: 26}, {c:'🚀', p: 20}, {c:'🛸', p: 16}, {c:'🌙', p: 12}, {c:'☀️', p: 9}, {c:'⭐', p: 7}, {c:'🛰️', p: 5}, {c:'🌠', p: 4}], chase: '👾' }
         };
 
         function getCharmRarityInfo(charm) {
-            if (charm === '🤖') return { text: '??? Chance', class: 'charm-chase' }; 
+            const emoji = getCharmEmoji(charm);
+            if (emoji === '🤖') return { text: 'Secret Charm', class: 'charm-chase' };
             for (let cost in cases) {
                 let caseData = cases[cost];
-                if (caseData.chase === charm) return { text: '1% Chance', class: 'charm-chase' };
+                if (caseData.chase === emoji) return { text: `${caseData.name} Chase`, class: 'charm-chase' };
                 for (let item of caseData.pool) {
-                    if (item.c === charm) {
-                        let cls = '';
-                        if (cost == 25) cls = 'charm-common';
-                        else if (cost == 50) cls = 'charm-rare';
-                        else if (cost == 100) cls = 'charm-epic';
-                        return { text: item.p + '% Chance', class: cls };
-                    }
+                    if (item.c === emoji) return { text: caseData.name, class: caseData.className || '' };
                 }
             }
             return { text: 'Unknown', class: '' };
@@ -1839,12 +1951,14 @@
 
         function loadEconomy() {
             playerMoney = parseInt(localStorage.getItem('dumpsterMoney')) || 0;
-            playerInventory = JSON.parse(localStorage.getItem('dumpsterInventory')) || [];
+            playerInventory = normalizeInventoryList(JSON.parse(localStorage.getItem('dumpsterInventory')) || []);
             equippedCharm = localStorage.getItem('dumpsterEquippedCharm') || null;
+            localStorage.setItem('dumpsterInventory', JSON.stringify(playerInventory));
             updateShopUI();
         }
 
         function saveEconomy() {
+            playerInventory = normalizeInventoryList(playerInventory);
             localStorage.setItem('dumpsterMoney', playerMoney);
             localStorage.setItem('dumpsterInventory', JSON.stringify(playerInventory));
             if(equippedCharm) localStorage.setItem('dumpsterEquippedCharm', equippedCharm);
@@ -1853,6 +1967,7 @@
         }
 
         function updateShopUI() {
+            playerInventory = normalizeInventoryList(playerInventory);
             document.getElementById('wallet-balance').innerText = playerMoney;
             const grid = document.getElementById('inventory-grid');
             grid.innerHTML = "";
@@ -1862,12 +1977,14 @@
                 return;
             }
 
-            playerInventory.forEach(charm => {
+            playerInventory.forEach((item, index) => {
+                const charm = getCharmEmoji(item);
+                const wear = getWearInfo(item);
                 let div = document.createElement('div');
                 let rarityInfo = getCharmRarityInfo(charm);
-                div.className = `charm-item ${rarityInfo.class} ${charm === equippedCharm ? 'equipped' : ''}`;
-                div.innerText = charm;
-                div.setAttribute('data-rarity', rarityInfo.text);
+                div.className = `charm-item ${rarityInfo.class} ${wear.className} ${charm === equippedCharm ? 'equipped' : ''}`;
+                div.innerHTML = `<span>${charm}</span><span class="wear-tag">${wear.short}</span>`;
+                div.setAttribute('data-rarity', `${rarityInfo.text} • ${wear.label}`);
                 div.onclick = () => equipCharm(charm);
                 grid.appendChild(div);
             });
@@ -1899,6 +2016,7 @@
                 return;
             }
             const caseData = cases[cost];
+            if (!caseData) { showShopMsg('Case not found!', '#FF5252'); return; }
             if (!isFree) playerMoney -= cost;
             updateShopUI(); 
             
@@ -1908,7 +2026,7 @@
             let drop = winResult.item;
             
             pendingRefund = 0;
-            if (playerInventory.includes(drop)) pendingRefund = Math.floor(cost / 2);
+            if (hasCharmEmoji(drop)) pendingRefund = Math.floor(cost / 2);
 
             triggerCaseAnimation(caseData, winResult);
         }
@@ -1969,7 +2087,7 @@
                     resultText.innerHTML = `Rolled a duplicate <span style="color:#FFD740">${winResult.item}</span>.<br>Refunded $${pendingRefund}!`;
                     resultText.style.color = "#FFD740";
                 } else {
-                    playerInventory.push(winResult.item);
+                    playerInventory.push(makeCharmItem(winResult.item));
                     if (winResult.isChase) { resultText.innerText = `🏆 INCREDIBLE! You unlocked the CHASE charm: ${winResult.item}!`; resultText.style.color = "#FF1744"; }
                     else { resultText.innerText = `You unlocked a new charm: ${winResult.item}!`; resultText.style.color = "#8BC34A"; }
                 }
@@ -2120,11 +2238,11 @@
 
         /* --- TAUNT SYSTEM --- */
         const taunts = [
-            { text: 'good job', vibe: 'plain' },
-            { text: 'Nice one', vibe: 'plain' },
-            { text: 'your strategy has the IQ of wet cardboard', vibe: 'toxic' },
-            { text: 'maybe you deserve to be in the dumpster', vibe: 'toxic' },
-            { text: 'womp womp the dumpster kingdom has spoken.', vibe: 'loud' }
+            { text: '👏 good job', vibe: 'plain' },
+            { text: '✨ Nice one', vibe: 'plain' },
+            { text: '🧠💦 your strategy has the IQ of wet cardboard', vibe: 'toxic' },
+            { text: '🗑️ maybe you deserve to be in the dumpster', vibe: 'toxic' },
+            { text: '📢👑 WOMP WOMP — THE DUMPSTER KINGDOM HAS SPOKEN.', vibe: 'loud' }
         ];
 
         function buildTauntMenu() {
@@ -2768,8 +2886,17 @@
             let roll; let emptySlots = [];
             for(let i=0; i<6; i++) { if (sharedBoard[i] === null) emptySlots.push(i+1); }
 
-            if (!p.isBot && emptySlots.length === 1 && isPracticeAssistEligible(actingPlayerId) && Math.random() < playerCheatChance) {
-                roll = emptySlots[0];
+            if (!p.isBot && emptySlots.length === 1 && isPracticeAssistEligible(actingPlayerId)) {
+                const targetRoll = emptySlots[0];
+                if (godMode || (playerCheatChance > 0 && Math.random() < playerCheatChance)) {
+                    roll = targetRoll;
+                } else {
+                    roll = (preRoll !== null) ? preRoll : Math.floor(Math.random() * 6) + 1;
+                    if (playerCheatChance < 0 && roll === targetRoll && Math.random() < Math.abs(playerCheatChance)) {
+                        const nonWinningRolls = [1,2,3,4,5,6].filter(n => n !== targetRoll);
+                        roll = nonWinningRolls[Math.floor(Math.random() * nonWinningRolls.length)];
+                    }
+                }
             } else if (preRoll !== null) roll = preRoll;
             else roll = Math.floor(Math.random() * 6) + 1;
 
@@ -2983,6 +3110,171 @@
                 }
             }, 3000);
         }
+
+
+
+        /* --- ADOPT-ME STYLE CHARM TRADING --- */
+        let activeTrade = null;
+        let tradeMyOfferIndices = [];
+        let tradeTheirOfferItems = [];
+        let tradeReadyMe = false;
+        let tradeReadyThem = false;
+
+        function getTradeNameColor() {
+            const lobbyMe = lobbyPlayerList.find(p => p.socketId === mySocketId);
+            if (lobbyMe) return { name: lobbyMe.name, color: lobbyMe.color || '#fff' };
+            return { name: loggedInUser?.username || 'Player', color: '#fff' };
+        }
+
+        function openTradeMenu() {
+            const overlay = document.getElementById('trade-overlay');
+            const content = document.getElementById('trade-content');
+            const actions = document.getElementById('trade-actions');
+            if (!overlay || !content || !actions) return;
+            overlay.style.display = 'flex';
+            document.getElementById('trade-title').innerText = 'Charm Trading 🔁';
+            if (!isLobbyGame && lobbyPlayerList.length <= 1) {
+                content.innerHTML = `<div class="trade-warn">Trading works with players in an online lobby/game. Join or create an online lobby first.</div>`;
+                actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+                return;
+            }
+            const others = lobbyPlayerList.filter(p => p.socketId !== mySocketId);
+            if (others.length === 0) {
+                content.innerHTML = `<div class="trade-warn">No other players are available to trade with yet.</div>`;
+                actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+                return;
+            }
+            content.innerHTML = `<div class="trade-sub">Pick a player to request a charm trade:</div><div class="trade-player-grid">${others.map(p => `<button class="trade-player-btn" onclick="requestTrade('${p.socketId}')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.color || '#fff'};margin-right:6px;"></span>${p.name}</button>`).join('')}</div>`;
+            actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="closeTradeOverlay()">Close</button>`;
+        }
+
+        function closeTradeOverlay() {
+            const overlay = document.getElementById('trade-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        function requestTrade(toSocketId) {
+            const me = getTradeNameColor();
+            socket.emit('tradeRequest', { toSocketId, fromName: me.name, fromColor: me.color });
+            const content = document.getElementById('trade-content');
+            const actions = document.getElementById('trade-actions');
+            if (content) content.innerHTML = `<div class="trade-warn">Trade request sent. Waiting for them to accept...</div>`;
+            if (actions) actions.innerHTML = `<button class="trade-mini-btn cancel" onclick="cancelTrade()">Cancel</button>`;
+            toast('Trade request sent 🔁', 'info');
+        }
+
+        socket.on('tradeRequest', ({ tradeId, fromSocketId, fromName, fromColor }) => {
+            const overlay = document.getElementById('trade-overlay');
+            const content = document.getElementById('trade-content');
+            const actions = document.getElementById('trade-actions');
+            if (!overlay || !content || !actions) return;
+            overlay.style.display = 'flex';
+            document.getElementById('trade-title').innerText = 'Trade Request 🔁';
+            content.innerHTML = `<div class="trade-sub"><b style="color:${fromColor || '#fff'}">${fromName}</b> wants to trade charms with you.</div><div class="trade-warn">Adopt Me rule: both players must ready up before anything moves.</div>`;
+            actions.innerHTML = `<button class="trade-mini-btn accept" onclick="respondTrade('${tradeId}', true)">Accept</button><button class="trade-mini-btn cancel" onclick="respondTrade('${tradeId}', false)">Decline</button>`;
+            if (sfxEnabled) sfxClaim();
+        });
+
+        function respondTrade(tradeId, accepted) {
+            socket.emit('tradeRespond', { tradeId, accepted });
+            if (!accepted) closeTradeOverlay();
+        }
+
+        socket.on('tradeStarted', ({ tradeId, partner }) => {
+            activeTrade = { id: tradeId, partner };
+            tradeMyOfferIndices = [];
+            tradeTheirOfferItems = [];
+            tradeReadyMe = false;
+            tradeReadyThem = false;
+            renderTradeWindow();
+            toast(`Trading with ${partner.name} 🔁`, 'info');
+        });
+
+        function renderTradeWindow() {
+            if (!activeTrade) return;
+            const overlay = document.getElementById('trade-overlay');
+            const content = document.getElementById('trade-content');
+            const actions = document.getElementById('trade-actions');
+            if (!overlay || !content || !actions) return;
+            overlay.style.display = 'flex';
+            document.getElementById('trade-title').innerText = `Trading with ${activeTrade.partner.name}`;
+            playerInventory = normalizeInventoryList(playerInventory);
+            const myItems = playerInventory.map((item, idx) => {
+                const emoji = getCharmEmoji(item), wear = getWearInfo(item), rarity = getCharmRarityInfo(emoji);
+                const selected = tradeMyOfferIndices.includes(idx);
+                return `<div class="trade-item ${rarity.class} ${wear.className} ${selected ? 'selected' : ''}" title="${emoji} • ${wear.label}" onclick="toggleTradeItem(${idx})"><span>${emoji}</span><span class="wear-tag">${wear.short}</span></div>`;
+            }).join('') || '<div style="color:#777;">No charms to offer.</div>';
+            const theirItems = tradeTheirOfferItems.map(item => {
+                const normalized = normalizeCharmItem(item), emoji = getCharmEmoji(normalized), wear = getWearInfo(normalized), rarity = getCharmRarityInfo(emoji);
+                return `<div class="trade-item locked ${rarity.class} ${wear.className}" title="${emoji} • ${wear.label}"><span>${emoji}</span><span class="wear-tag">${wear.short}</span></div>`;
+            }).join('') || '<div style="color:#777;">Waiting for their offer...</div>';
+            content.innerHTML = `<div class="trade-columns"><div class="trade-column"><h3>Your Offer</h3><div class="trade-inv-grid">${myItems}</div><div class="trade-ready">${tradeReadyMe ? '✅ You are ready' : 'Pick charms, then ready up'}</div></div><div class="trade-column"><h3>${activeTrade.partner.name}'s Offer</h3><div class="trade-inv-grid">${theirItems}</div><div class="trade-ready">${tradeReadyThem ? '✅ They are ready' : 'Waiting for ready...'}</div></div></div><div class="trade-warn">Tip: wear tags are like CS:GO skins — FN, MW, FT, WW, BS. Battle-Scarred is the roughest.</div>`;
+            actions.innerHTML = `<button class="trade-mini-btn accept" onclick="readyTrade()" ${tradeReadyMe ? 'disabled style="opacity:0.5"' : ''}>✅ Ready</button><button class="trade-mini-btn cancel" onclick="cancelTrade()">Cancel Trade</button>`;
+        }
+
+        function toggleTradeItem(index) {
+            if (!activeTrade || tradeReadyMe) return;
+            const pos = tradeMyOfferIndices.indexOf(index);
+            if (pos >= 0) tradeMyOfferIndices.splice(pos, 1);
+            else if (tradeMyOfferIndices.length < 12) tradeMyOfferIndices.push(index);
+            else { toast('Max 12 charms per trade.', 'out'); return; }
+            tradeReadyMe = false;
+            const offerItems = tradeMyOfferIndices.map(i => normalizeCharmItem(playerInventory[i])).filter(Boolean);
+            socket.emit('tradeOfferUpdate', { tradeId: activeTrade.id, offerItems });
+            renderTradeWindow();
+        }
+
+        function readyTrade() {
+            if (!activeTrade) return;
+            tradeReadyMe = true;
+            const offerItems = tradeMyOfferIndices.map(i => normalizeCharmItem(playerInventory[i])).filter(Boolean);
+            socket.emit('tradeReady', { tradeId: activeTrade.id, offerItems });
+            renderTradeWindow();
+        }
+
+        function cancelTrade() {
+            if (activeTrade) socket.emit('tradeCancel', { tradeId: activeTrade.id });
+            activeTrade = null;
+            tradeMyOfferIndices = [];
+            tradeTheirOfferItems = [];
+            tradeReadyMe = false;
+            tradeReadyThem = false;
+            closeTradeOverlay();
+        }
+
+        socket.on('tradeOfferUpdate', ({ offerItems, ready }) => {
+            tradeTheirOfferItems = normalizeInventoryList(offerItems || []);
+            tradeReadyThem = !!ready;
+            renderTradeWindow();
+        });
+
+        socket.on('tradeReadyUpdate', ({ youReady, themReady }) => {
+            if (typeof youReady === 'boolean') tradeReadyMe = youReady;
+            if (typeof themReady === 'boolean') tradeReadyThem = themReady;
+            renderTradeWindow();
+        });
+
+        socket.on('tradeComplete', ({ receiveItems }) => {
+            const offered = [...tradeMyOfferIndices].sort((a,b) => b-a);
+            offered.forEach(i => { if (i >= 0 && i < playerInventory.length) playerInventory.splice(i, 1); });
+            const incoming = normalizeInventoryList(receiveItems || []);
+            playerInventory.push(...incoming);
+            if (equippedCharm && !hasCharmEmoji(equippedCharm)) equippedCharm = null;
+            saveEconomy();
+            updateShopUI();
+            activeTrade = null; tradeMyOfferIndices = []; tradeTheirOfferItems = []; tradeReadyMe = false; tradeReadyThem = false;
+            closeTradeOverlay();
+            toast(`Trade complete! Received ${incoming.length} charm(s).`, 'win');
+            if (sfxEnabled) sfxPotWin();
+        });
+
+        socket.on('tradeCancelled', ({ reason }) => {
+            activeTrade = null; tradeMyOfferIndices = []; tradeTheirOfferItems = []; tradeReadyMe = false; tradeReadyThem = false;
+            closeTradeOverlay();
+            toast(reason || 'Trade cancelled.', 'out');
+        });
+
+        socket.on('tradeError', (msg) => toast(msg || 'Trade failed.', 'lose'));
 
         generateMenuRows(); updateRulesDisplay(); loadStats(); loadEconomy(); initChallenges(); buildTauntMenu(); updateAudioBtnLabels();
     
