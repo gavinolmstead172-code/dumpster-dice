@@ -550,6 +550,44 @@
         }
         .slot:hover { filter: brightness(1.25); transform: scale(1.08); }
 
+        /* --- TAUNT SYSTEM --- */
+        #taunt-panel {
+            position: relative; display: inline-block; margin-left: 10px; vertical-align: middle;
+        }
+        #taunt-btn {
+            width: auto; padding: 15px 24px; font-size: 20px;
+            background: linear-gradient(180deg, #9C27B0, #6A1B9A);
+            border-color: #4A148C; box-shadow: 0 6px 0 #4A148C, 0 10px 20px rgba(0,0,0,0.5);
+        }
+        #taunt-menu {
+            display: none; position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%);
+            width: min(92vw, 420px); background: rgba(15,15,15,0.98); border: 3px solid #9C27B0;
+            border-radius: 14px; padding: 12px; z-index: 500; box-shadow: 0 14px 34px rgba(0,0,0,0.85), 0 0 25px rgba(156,39,176,0.45);
+        }
+        #taunt-menu.open { display: block; animation: tauntPop 0.18s ease; }
+        @keyframes tauntPop { from { transform: translateX(-50%) scale(0.92); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+        .taunt-option {
+            width: 100%; background: #191919; border: 2px solid #333; color: #fff; border-radius: 10px;
+            padding: 10px 12px; margin: 5px 0; text-align: left; font-weight: 900; cursor: pointer;
+            transition: 0.12s; font-size: 14px;
+        }
+        .taunt-option:hover { background: #252525; border-color: #9C27B0; transform: translateX(4px); }
+        .taunt-option.toxic { border-color: #FF1744; }
+        .taunt-option.loud { border-color: #FFD700; text-transform: uppercase; letter-spacing: 1px; }
+        .taunt-burst {
+            position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 11900;
+            background: rgba(0,0,0,0.9); border: 3px solid #FFD700; color: #fff; border-radius: 18px;
+            padding: 18px 26px; font-size: clamp(18px, 4vw, 36px); font-weight: 1000; text-align: center;
+            box-shadow: 0 0 35px rgba(255,215,0,0.7); text-shadow: 2px 2px 0 #000;
+            animation: tauntBurst 1.5s ease forwards; pointer-events: none; max-width: 90vw;
+        }
+        @keyframes tauntBurst {
+            0% { transform: translateX(-50%) scale(0.55) rotate(-3deg); opacity: 0; }
+            15% { transform: translateX(-50%) scale(1.12) rotate(2deg); opacity: 1; }
+            75% { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 1; }
+            100% { transform: translateX(-50%) scale(0.92) translateY(-20px); opacity: 0; }
+        }
+
     </style>
 </head>
 <body>
@@ -578,6 +616,7 @@
             <p>Logged in as Bingle Berry — full account control</p>
             <div id="admin-msg"></div>
             <button class="btn-large" id="admin-god-btn" style="width:100%;margin:10px 0 18px 0;background:linear-gradient(180deg,#FFD740,#FF9800);border-color:#E65100;box-shadow:0 6px 0 #BF360C,0 10px 20px rgba(0,0,0,0.5);" onclick="adminActivateGodMode()">✨ ACTIVATE GOD MODE</button>
+            <button class="btn-large" id="admin-reset-all-btn" style="width:100%;margin:0 0 18px 0;background:linear-gradient(180deg,#FF5252,#B71C1C);border-color:#7f0000;box-shadow:0 6px 0 #4a0000,0 10px 20px rgba(0,0,0,0.5);" onclick="adminResetAllPlayers()">🧨 RESET ALL PLAYERS</button>
             <div id="admin-user-list"><div style="color:#666;">Loading...</div></div>
             <br>
             <button class="lobby-back-btn" onclick="closeAdmin()">← Close</button>
@@ -751,6 +790,10 @@
         <div id="action-log">Waiting to start...</div>
         <br>
         <button id="roll-btn" class="btn-large" style="width: auto;" onclick="executeRoll()">ROLL DICE</button>
+        <div id="taunt-panel">
+            <button id="taunt-btn" class="btn-large" onclick="toggleTauntMenu()">TAUNT 💬</button>
+            <div id="taunt-menu"></div>
+        </div>
 
         <div id="game-over-controls" style="display: none; margin-top: 20px;">
             <h3 id="streak-display" style="color: #FFD700; margin-bottom: 10px; display: none;">🔥 Win Streak: <span id="streak-count">0</span> (x<span id="streak-mult">1</span> Bonus!)</h3>
@@ -1277,14 +1320,13 @@
 
         /* --- CHEAT CODE SYSTEM --- */
         let secretMrkBuffer = "";
-        let secretResetBuffer = "";
         let godMode = false;
 
         document.addEventListener('keydown', (e) => {
             // Prevent triggers if user is typing inside an input field (like a player name)
             if (e.target.tagName.toLowerCase() === 'input') return;
 
-            // Letter-based codes ("mrk" and "reset")
+            // Letter-based secret code ("mrk")
             if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
                 let char = e.key.toLowerCase();
                 
@@ -1300,14 +1342,6 @@
                         alert("??? SECRET UNLOCKED ???\nYou found the Robot Charm!");
                     }
                     secretMrkBuffer = "";
-                }
-
-                // Secret "reset" code
-                secretResetBuffer += char;
-                if (secretResetBuffer.length > 5) secretResetBuffer = secretResetBuffer.slice(-5);
-                if (secretResetBuffer === "reset") {
-                    hardResetGame();
-                    secretResetBuffer = "";
                 }
             }
         });
@@ -1362,17 +1396,81 @@
             alert("✨ GOD MODE ACTIVATED ✨\nAll charms unlocked. 100% win rate engaged!");
         }
 
-        function hardResetGame() {
-            let confirmReset = confirm("⚠️ WARNING: Are you sure you want to completely reset ALL stats, MMR, money, and inventory? This cannot be undone!");
-            
-            if (confirmReset) {
-                // Clear all local storage for this domain to ensure a completely clean slate
-                localStorage.clear();
-                
-                alert("All data wiped. Reloading Dumpster Dice...");
-                location.reload(); 
+        function resetLocalProgressAfterAdminReset() {
+            const savedToken = localStorage.getItem('dumpsterSessionToken');
+            const username = loggedInUser ? loggedInUser.username : null;
+
+            localStorage.removeItem('dumpsterStats');
+            localStorage.setItem('dumpsterMoney', '0');
+            localStorage.setItem('dumpsterInventory', '[]');
+            localStorage.removeItem('dumpsterEquippedCharm');
+            localStorage.removeItem('dumpsterDailies');
+
+            if (savedToken) localStorage.setItem('dumpsterSessionToken', savedToken);
+
+            if (username) {
+                const freshStats = {};
+                freshStats[username] = { mmr: 0, wins: 0, losses: 0 };
+                localStorage.setItem('dumpsterStats', JSON.stringify(freshStats));
+                loggedInUser = {
+                    ...loggedInUser,
+                    money: 0,
+                    mmr: 0,
+                    wins: 0,
+                    losses: 0,
+                    inventory: [],
+                    equippedCharm: null
+                };
             }
+
+            playerMoney = 0;
+            playerInventory = [];
+            equippedCharm = null;
+            activeWinStreak = 0;
+            isDoubleOrNothing = false;
+            pendingDonRewards = { money: 0, mmr: 0 };
+            godMode = false;
+
+            loadEconomy();
+            loadStats();
+            initChallenges();
+            checkRankUpStatus();
         }
+
+        function adminResetAllPlayers() {
+            if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') {
+                const msg = document.getElementById('admin-msg');
+                if (msg) msg.innerText = '⚠️ Reset is admin-only.';
+                return;
+            }
+
+            const firstConfirm = confirm('⚠️ RESET EVERY PLAYER? This will reset MMR, wins, losses, money, inventory, equipped charms, and daily progress for ALL accounts, including Bingle Berry. Accounts/passwords stay saved.');
+            if (!firstConfirm) return;
+
+            const typed = prompt('Type RESET ALL to confirm this permanent reset:');
+            if (typed !== 'RESET ALL') {
+                const msg = document.getElementById('admin-msg');
+                if (msg) msg.innerText = 'Reset cancelled.';
+                return;
+            }
+
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = 'Resetting all players…';
+            socket.emit('adminResetAllUsers', { adminUsername: loggedInUser.username });
+        }
+
+        socket.on('adminResetAllSuccess', ({ resetCount }) => {
+            resetLocalProgressAfterAdminReset();
+            const msg = document.getElementById('admin-msg');
+            if (msg) msg.innerText = `✅ Reset complete. ${resetCount || 'All'} account(s) reset.`;
+            if (typeof toast === 'function') toast('🧨 All player progress has been reset.', 'lose');
+            socket.emit('adminGetUsers', { username: loggedInUser.username });
+        });
+
+        socket.on('profilesReset', ({ by } = {}) => {
+            resetLocalProgressAfterAdminReset();
+            if (typeof toast === 'function') toast(`🧨 Player progress reset${by ? ' by ' + by : ''}.`, 'lose');
+        });
 
         /* --- DAILY CHALLENGES --- */
         let challenges = [];
@@ -1694,6 +1792,11 @@
         function sfxWin() { playTone(523, 'triangle', 0.12, 0.13); setTimeout(()=>playTone(659, 'triangle', 0.12, 0.13), 120); setTimeout(()=>playTone(784, 'triangle', 0.18, 0.16), 240); setTimeout(()=>playTone(1046, 'sine', 0.55, 0.18), 420); }
         function sfxLose() { playTone(330, 'sawtooth', 0.18, 0.10); setTimeout(()=>playTone(247, 'sawtooth', 0.22, 0.11), 170); setTimeout(()=>playTone(165, 'sawtooth', 0.45, 0.13), 360); }
         function sfxOut() { playTone(180, 'square', 0.12, 0.11); setTimeout(()=>playTone(95, 'sawtooth', 0.35, 0.15), 130); }
+        function sfxTaunt(loud = false) {
+            playTone(loud ? 880 : 520, 'square', 0.08, loud ? 0.18 : 0.09);
+            setTimeout(() => playTone(loud ? 740 : 390, 'square', 0.10, loud ? 0.16 : 0.08), 90);
+            if (loud) setTimeout(() => playTone(1100, 'sawtooth', 0.18, 0.18), 210);
+        }
         function sfxTurn() { playTone(740, 'sine', 0.08, 0.07); setTimeout(()=>playTone(980, 'sine', 0.08, 0.07), 90); }
 
         function startMusic() {
@@ -1763,6 +1866,71 @@
             stack.appendChild(div);
             setTimeout(() => div.remove(), 3400);
         }
+
+        /* --- TAUNT SYSTEM --- */
+        const taunts = [
+            { text: 'Good job… I guess.', vibe: 'plain' },
+            { text: 'Nice roll, trash legend.', vibe: 'plain' },
+            { text: 'You are not losing — you are getting publicly recycled.', vibe: 'toxic' },
+            { text: 'Your strategy has the IQ of wet cardboard.', vibe: 'toxic' },
+            { text: '📢 WOMP WOMP! THE DUMPSTER KINGDOM HAS SPOKEN!', vibe: 'loud' }
+        ];
+
+        function buildTauntMenu() {
+            const menu = document.getElementById('taunt-menu');
+            if (!menu || menu.dataset.ready === '1') return;
+            menu.innerHTML = taunts.map((t, i) =>
+                `<button class="taunt-option ${t.vibe}" onclick="sendTaunt(${i})">${t.text}</button>`
+            ).join('');
+            menu.dataset.ready = '1';
+        }
+
+        function toggleTauntMenu() {
+            buildTauntMenu();
+            const menu = document.getElementById('taunt-menu');
+            if (!menu) return;
+            menu.classList.toggle('open');
+        }
+
+        function getTauntSpeaker() {
+            if (isLobbyGame) {
+                const lobbyMe = lobbyPlayerList.find(p => p.socketId === mySocketId);
+                if (lobbyMe) return { name: lobbyMe.name, color: lobbyMe.color || '#fff' };
+                if (myPlayerIndex >= 0 && players[myPlayerIndex]) return { name: players[myPlayerIndex].name, color: players[myPlayerIndex].color || '#fff' };
+            }
+            const human = players.find(p => !p.isBot) || players[currentPlayer] || { name: loggedInUser?.username || 'Player', color: '#fff' };
+            return { name: human.name, color: human.color || '#fff' };
+        }
+
+        function showTauntBurst(text, vibe = 'plain') {
+            const burst = document.createElement('div');
+            burst.className = 'taunt-burst';
+            burst.innerText = text;
+            if (vibe === 'toxic') burst.style.borderColor = '#FF1744';
+            if (vibe === 'loud') burst.style.borderColor = '#FFD700';
+            document.body.appendChild(burst);
+            setTimeout(() => burst.remove(), 1600);
+        }
+
+        function sendTaunt(index) {
+            const taunt = taunts[index];
+            if (!taunt) return;
+            const menu = document.getElementById('taunt-menu');
+            if (menu) menu.classList.remove('open');
+            const speaker = getTauntSpeaker();
+            const message = `${taunt.vibe === 'loud' ? '📢 ' : '💬 '}${taunt.text}`;
+            if (sfxEnabled) sfxTaunt(taunt.vibe === 'loud');
+            showTauntBurst(message, taunt.vibe);
+            toast(`${speaker.name}: ${taunt.text}`, taunt.vibe === 'toxic' ? 'lose' : 'info');
+            if (isLobbyGame) socket.emit('chatMessage', { name: speaker.name, color: speaker.color, text: message });
+            else addSystemChat(`${speaker.name}: ${message}`);
+        }
+
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('taunt-panel');
+            const menu = document.getElementById('taunt-menu');
+            if (panel && menu && !panel.contains(e.target)) menu.classList.remove('open');
+        });
 
         /* --- MENU LOGIC --- */
         const defaultColors = ['#FF5252', '#448AFF', '#69F0AE', '#FFD740'];
@@ -2510,7 +2678,7 @@
             }, 3000);
         }
 
-        generateMenuRows(); updateRulesDisplay(); loadStats(); loadEconomy(); initChallenges(); updateAudioBtnLabels();
+        generateMenuRows(); updateRulesDisplay(); loadStats(); loadEconomy(); initChallenges(); buildTauntMenu(); updateAudioBtnLabels();
     
     </script>
 </body>
