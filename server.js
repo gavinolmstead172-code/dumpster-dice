@@ -13,23 +13,21 @@ app.use(express.json());
 app.post('/api/abandon-penalty', async (req, res) => {
   const { username } = req.body || {};
   if (!username) { res.sendStatus(400); return; }
-
   try {
     await pool.query(
       `UPDATE users SET mmr = GREATEST(0, mmr - 25), updated_at = NOW() WHERE username = $1`,
       [username]
     );
-
     console.log(`Abandon penalty applied to: ${username}`);
     res.sendStatus(200);
-  } catch (e) {
+  } catch(e) {
     console.error('Abandon penalty error:', e);
     res.sendStatus(500);
   }
 });
 
-/* --- DATABASE SETUP --- */
-const pool = new Pool({
+/* --- RENDER DATABASE FIX & AUTO-BUILD --- */
+const pool = new Pool({ 
   connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/dumpster_dice',
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
@@ -39,7 +37,7 @@ pool.connect(async (err, client, release) => {
     console.error('Database connection failed. Is the DATABASE_URL correct?', err.stack);
   } else {
     console.log('✅ Successfully connected to the PostgreSQL database!');
-
+    
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -56,27 +54,17 @@ pool.connect(async (err, client, release) => {
           updated_at TIMESTAMP DEFAULT NOW()
         );
       `);
-
-      await client.query(`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS session_token VARCHAR(128) UNIQUE;
-      `);
-
-      await client.query(`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS session_created_at TIMESTAMP DEFAULT NOW();
-      `);
-
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token VARCHAR(128) UNIQUE;`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_created_at TIMESTAMP DEFAULT NOW();`);
       console.log('✅ Database tables are built and ready!');
     } catch (dbErr) {
       console.error('❌ Failed to build database tables:', dbErr);
     } finally {
-      release();
+      release(); 
     }
   }
 });
 
-/* --- ROOM SETTINGS --- */
 const MAX_ROOMS = 5;
 const MAX_PLAYERS = 4;
 const rooms = new Map();
@@ -99,23 +87,19 @@ async function dbGetBySessionToken(sessionToken) {
 
 async function dbCreate(username, passwordHash) {
   const sessionToken = makeSessionToken();
-
   const r = await pool.query(
     'INSERT INTO users (username, password_hash, session_token, session_created_at) VALUES ($1,$2,$3,NOW()) RETURNING *',
     [username, passwordHash, sessionToken]
   );
-
   return r.rows[0];
 }
 
 async function dbRefreshSession(username) {
   const sessionToken = makeSessionToken();
-
   const r = await pool.query(
     'UPDATE users SET session_token=$2, session_created_at=NOW(), updated_at=NOW() WHERE username=$1 RETURNING *',
     [username, sessionToken]
   );
-
   return r.rows[0];
 }
 
@@ -135,6 +119,24 @@ async function dbSave(username, { money, mmr, wins, losses, inventory, equippedC
   );
 }
 
+async function dbResetUserProgress(username) {
+  const result = await pool.query(
+    `UPDATE users
+     SET money = 0,
+         mmr = 0,
+         wins = 0,
+         losses = 0,
+         inventory = '[]'::jsonb,
+         equipped_charm = NULL,
+         updated_at = NOW()
+     WHERE username = $1
+     RETURNING username`,
+    [username]
+  );
+
+  return result.rows[0] || null;
+}
+
 function safeProfile(row) {
   return {
     username: row.username,
@@ -151,7 +153,6 @@ function safeProfile(row) {
 /* --- LOBBY HELPERS --- */
 function getLobbyList() {
   const list = [];
-
   for (const room of rooms.values()) {
     list.push({
       id: room.id,
@@ -162,7 +163,6 @@ function getLobbyList() {
       gameStarted: room.gameStarted
     });
   }
-
   return list;
 }
 
@@ -171,18 +171,10 @@ function broadcastLobbyList() {
 }
 
 function closeRoom(room, reason) {
-  if (!room || !rooms.has(room.id)) return;
-
+  if (!rooms.has(room.id)) return;
   console.log(`Room ${room.id} closed: ${reason}`);
-
-  room.players.forEach(p => {
-    io.to(p.socketId).emit('lobbyClosed', { reason });
-  });
-
-  room.pendingRequests.forEach(r => {
-    io.to(r.socketId).emit('joinDenied', reason || 'Lobby closed');
-  });
-
+  room.players.forEach(p => io.to(p.socketId).emit('lobbyClosed', { reason }));
+  room.pendingRequests.forEach(r => io.to(r.socketId).emit('joinDenied', reason || 'Lobby closed'));
   rooms.delete(room.id);
   broadcastLobbyList();
 }
@@ -197,54 +189,41 @@ function broadcastRoomUpdate(room) {
       isHost: i === 0
     }))
   };
-
-  room.players.forEach(p => {
-    io.to(p.socketId).emit('lobbyUpdate', data);
-  });
+  room.players.forEach(p => io.to(p.socketId).emit('lobbyUpdate', data));
 }
 
 function getRoomBySocket(socketId) {
   for (const room of rooms.values()) {
-    if (room.players.some(p => p.socketId === socketId)) {
-      return room;
-    }
+    if (room.players.some(p => p.socketId === socketId)) return room;
   }
-
   return null;
 }
 
-/* --- SOCKET.IO --- */
+/* --- SOCKET --- */
 io.on('connection', (socket) => {
   console.log('Connected: ' + socket.id);
   socket.emit('lobbyList', getLobbyList());
 
-  /* --- AUTH --- */
+  /* AUTH */
   socket.on('register', async ({ username, password }) => {
     try {
       const trimName = (username || '').trim();
-
       if (!trimName || trimName.length < 2) {
         socket.emit('authError', 'Username must be at least 2 characters');
         return;
       }
-
       if (!password || password.length < 4) {
         socket.emit('authError', 'Password must be at least 4 characters');
         return;
       }
-
       const existing = await dbGet(trimName);
-
       if (existing) {
         socket.emit('authError', 'That username is already taken');
         return;
       }
-
       const hash = await bcrypt.hash(password, 10);
       const row = await dbCreate(trimName, hash);
-
       socket.data.username = trimName;
-
       console.log('Registered: ' + trimName);
       socket.emit('authSuccess', safeProfile(row));
     } catch (e) {
@@ -256,30 +235,22 @@ io.on('connection', (socket) => {
   socket.on('login', async ({ username, password }) => {
     try {
       const trimName = (username || '').trim();
-
       if (!trimName) {
         socket.emit('authError', 'Enter a username');
         return;
       }
-
       const row = await dbGet(trimName);
-
       if (!row) {
         socket.emit('authError', 'Username not found');
         return;
       }
-
       const ok = await bcrypt.compare(password, row.password_hash);
-
       if (!ok) {
         socket.emit('authError', 'Wrong password');
         return;
       }
-
       const refreshed = await dbRefreshSession(trimName);
-
       socket.data.username = trimName;
-
       console.log('Logged in: ' + trimName);
       socket.emit('authSuccess', safeProfile(refreshed));
     } catch (e) {
@@ -294,16 +265,12 @@ io.on('connection', (socket) => {
         socket.emit('autoLoginFailed');
         return;
       }
-
       const row = await dbGetBySessionToken(sessionToken);
-
       if (!row) {
         socket.emit('autoLoginFailed');
         return;
       }
-
       socket.data.username = row.username;
-
       console.log('Auto-login: ' + row.username);
       socket.emit('authSuccess', safeProfile(row));
     } catch (e) {
@@ -314,10 +281,7 @@ io.on('connection', (socket) => {
 
   socket.on('logout', async ({ username }) => {
     try {
-      if (username) {
-        await dbClearSession(username);
-      }
-
+      if (username) await dbClearSession(username);
       socket.data.username = null;
       socket.emit('loggedOut');
     } catch (e) {
@@ -328,34 +292,24 @@ io.on('connection', (socket) => {
   socket.on('saveProfile', async ({ username, money, mmr, wins, losses, inventory, equippedCharm }) => {
     try {
       if (!username) return;
-
-      await dbSave(username, {
-        money,
-        mmr,
-        wins,
-        losses,
-        inventory,
-        equippedCharm
-      });
+      await dbSave(username, { money, mmr, wins, losses, inventory, equippedCharm });
     } catch (e) {
       console.error('Save error:', e);
     }
   });
 
-  /* --- LOBBY --- */
+  /* LOBBY */
   socket.on('createLobby', ({ name, color, lobbyName }) => {
     if (getRoomBySocket(socket.id)) {
       socket.emit('lobbyError', 'Already in a lobby');
       return;
     }
-
     if (rooms.size >= MAX_ROOMS) {
       socket.emit('lobbyError', 'Max lobbies (5) reached — try joining one!');
       return;
     }
 
     const id = String(++roomCounter);
-
     const room = {
       id,
       name: (lobbyName || '').trim() || `${name}'s Game`,
@@ -368,62 +322,42 @@ io.on('connection', (socket) => {
     };
 
     rooms.set(id, room);
-
     socket.emit('joinedLobby', { isHost: true, roomId: id });
-
     broadcastLobbyList();
     broadcastRoomUpdate(room);
-
     console.log(`Lobby "${room.name}" created (id:${id})`);
   });
 
   socket.on('requestJoin', ({ roomId, name, color }) => {
     const room = rooms.get(roomId);
-
     if (!room) {
       socket.emit('lobbyError', 'Lobby not found');
       return;
     }
-
     if (room.gameStarted) {
       socket.emit('lobbyError', 'Game already started');
       return;
     }
-
     if (room.players.length >= MAX_PLAYERS) {
       socket.emit('lobbyError', 'Lobby is full');
       return;
     }
-
     if (room.pendingRequests.some(r => r.socketId === socket.id)) {
       socket.emit('lobbyError', 'Request already sent');
       return;
     }
 
     room.pendingRequests.push({ socketId: socket.id, name, color });
-
-    socket.emit('joinPending', {
-      roomId,
-      hostName: room.players[0]?.name
-    });
-
-    io.to(room.hostSocketId).emit('joinRequest', {
-      socketId: socket.id,
-      name,
-      color,
-      roomId
-    });
-
+    socket.emit('joinPending', { roomId, hostName: room.players[0]?.name });
+    io.to(room.hostSocketId).emit('joinRequest', { socketId: socket.id, name, color, roomId });
     console.log(`${name} requested to join room ${roomId}`);
   });
 
   socket.on('approveJoin', ({ roomId, socketId }) => {
     const room = rooms.get(roomId);
-
     if (!room || socket.id !== room.hostSocketId) return;
 
     const req = room.pendingRequests.find(r => r.socketId === socketId);
-
     if (!req) return;
 
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socketId);
@@ -433,50 +367,32 @@ io.on('connection', (socket) => {
       return;
     }
 
-    room.players.push({
-      socketId,
-      name: req.name,
-      color: req.color
-    });
-
-    io.to(socketId).emit('joinApproved', {
-      roomId,
-      isHost: false
-    });
-
+    room.players.push({ socketId, name: req.name, color: req.color });
+    io.to(socketId).emit('joinApproved', { roomId, isHost: false });
     broadcastLobbyList();
     broadcastRoomUpdate(room);
-
     console.log(`${req.name} approved for room ${roomId}`);
   });
 
   socket.on('denyJoin', ({ roomId, socketId }) => {
     const room = rooms.get(roomId);
-
     if (!room || socket.id !== room.hostSocketId) return;
-
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socketId);
-
     io.to(socketId).emit('joinDenied', 'Your request was denied by the host');
   });
 
   socket.on('closeLobby', ({ roomId, reason } = {}) => {
     const room = roomId ? rooms.get(String(roomId)) : getRoomBySocket(socket.id);
-
     if (!room) return;
-
     if (socket.id !== room.hostSocketId) return;
-
     closeRoom(room, reason || 'Host closed the lobby');
   });
 
   socket.on('leaveLobby', ({ roomId, reason, closeIfHost, forceClose } = {}) => {
     const room = roomId ? rooms.get(String(roomId)) : getRoomBySocket(socket.id);
-
     if (!room) return;
 
     const wasHost = socket.id === room.hostSocketId;
-
     if (wasHost || closeIfHost || forceClose) {
       closeRoom(room, reason || 'Host left the lobby');
       return;
@@ -484,10 +400,7 @@ io.on('connection', (socket) => {
 
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socket.id);
     room.players = room.players.filter(p => p.socketId !== socket.id);
-
-    socket.emit('lobbyClosed', {
-      reason: reason || 'You left the lobby'
-    });
+    socket.emit('lobbyClosed', { reason: reason || 'You left the lobby' });
 
     if (room.players.length === 0) {
       closeRoom(room, 'All players left');
@@ -499,47 +412,29 @@ io.on('connection', (socket) => {
 
   socket.on('cancelJoinRequest', ({ roomId } = {}) => {
     const room = roomId ? rooms.get(String(roomId)) : null;
-
     if (!room) return;
-
     room.pendingRequests = room.pendingRequests.filter(r => r.socketId !== socket.id);
   });
 
   socket.on('startGame', ({ gameMode, humanPlayerMap }) => {
     const room = getRoomBySocket(socket.id);
-
     if (!room || socket.id !== room.hostSocketId) return;
-
     room.gameStarted = true;
     room.humanPlayerMap = humanPlayerMap || {};
-
-    room.players.forEach(p => {
-      io.to(p.socketId).emit('gameStarted', {
-        gameMode,
-        humanPlayerMap
-      });
-    });
-
+    room.players.forEach(p => io.to(p.socketId).emit('gameStarted', { gameMode, humanPlayerMap }));
     broadcastLobbyList();
-
     console.log(`Room ${room.id} game started (mode:${gameMode})`);
   });
 
   socket.on('setCurrentTurn', ({ socketId }) => {
     const room = getRoomBySocket(socket.id);
-
     if (!room || socket.id !== room.hostSocketId) return;
-
     room.currentTurnSocketId = socketId;
-
-    if (socketId && socketId !== room.hostSocketId) {
-      io.to(socketId).emit('yourTurn');
-    }
+    if (socketId && socketId !== room.hostSocketId) io.to(socketId).emit('yourTurn');
   });
 
   socket.on('requestRoll', () => {
     const room = getRoomBySocket(socket.id);
-
     if (!room) return;
 
     const isHost = socket.id === room.hostSocketId;
@@ -551,20 +446,16 @@ io.on('connection', (socket) => {
     }
 
     const roll = Math.floor(Math.random() * 6) + 1;
-
     console.log(`Room ${room.id}: ${socket.id} rolled ${roll}`);
 
-    room.players.forEach(p => {
-      io.to(p.socketId).emit('rollResult', {
-        playerID: socket.id,
-        roll
-      });
-    });
+    room.players.forEach(p => io.to(p.socketId).emit('rollResult', {
+      playerID: socket.id,
+      roll
+    }));
   });
 
   socket.on('stateSync', (state) => {
     const room = getRoomBySocket(socket.id);
-
     if (!room || socket.id !== room.hostSocketId) return;
 
     room.players.forEach(p => {
@@ -575,25 +466,19 @@ io.on('connection', (socket) => {
 
     if (state.gameActive === false && room.gameStarted && !room.closePending) {
       room.closePending = true;
-
-      setTimeout(() => {
-        closeRoom(room, 'Game over');
-      }, 8000);
+      setTimeout(() => closeRoom(room, 'Game over'), 8000);
     }
   });
 
   socket.on('chatMessage', ({ name, color, text }) => {
     const room = getRoomBySocket(socket.id);
-
     if (!room || !name || !text) return;
 
-    room.players.forEach(p => {
-      io.to(p.socketId).emit('chatMessage', {
-        name,
-        color: color || '#fff',
-        text: String(text).substring(0, 200)
-      });
-    });
+    room.players.forEach(p => io.to(p.socketId).emit('chatMessage', {
+      name,
+      color: color || '#fff',
+      text: String(text).substring(0, 200)
+    }));
   });
 
   socket.on('getLobbyList', () => {
@@ -605,14 +490,13 @@ io.on('connection', (socket) => {
       const r = await pool.query(
         'SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10'
       );
-
       socket.emit('leaderboardData', r.rows);
-    } catch (e) {
+    } catch(e) {
       console.error('Leaderboard error:', e);
     }
   });
 
-  /* --- ADMIN --- */
+  /* ADMIN - Bingle Berry only */
   socket.on('adminGetUsers', async ({ username }) => {
     if (username !== 'Bingle Berry') {
       socket.emit('adminError', 'Unauthorized');
@@ -623,9 +507,8 @@ io.on('connection', (socket) => {
       const r = await pool.query(
         'SELECT username, money, mmr, wins, losses, created_at FROM users ORDER BY username ASC'
       );
-
       socket.emit('adminUsersList', r.rows);
-    } catch (e) {
+    } catch(e) {
       console.error(e);
       socket.emit('adminError', 'Failed to fetch users');
     }
@@ -644,25 +527,99 @@ io.on('connection', (socket) => {
 
     try {
       await pool.query('DELETE FROM users WHERE username=$1', [targetUsername]);
-
       console.log(`Admin deleted user: ${targetUsername}`);
-
       socket.emit('adminDeleteSuccess', targetUsername);
-    } catch (e) {
+    } catch(e) {
       console.error(e);
       socket.emit('adminError', 'Delete failed');
     }
   });
 
+  socket.on('adminResetUser', async ({ adminUsername, targetUsername }) => {
+    if (adminUsername !== 'Bingle Berry' || socket.data.username !== 'Bingle Berry') {
+      socket.emit('adminError', 'Unauthorized');
+      return;
+    }
+
+    try {
+      const target = (targetUsername || '').trim();
+
+      if (!target) {
+        socket.emit('adminError', 'Missing target user');
+        return;
+      }
+
+      const resetRow = await dbResetUserProgress(target);
+
+      if (!resetRow) {
+        socket.emit('adminError', `User not found: ${target}`);
+        return;
+      }
+
+      console.log(`↻ Admin reset progress for: ${target}`);
+
+      io.emit('profilesReset', {
+        by: adminUsername,
+        targetUsername: target,
+        all: false
+      });
+
+      socket.emit('adminResetUserSuccess', {
+        targetUsername: target
+      });
+
+      const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
+      io.emit('leaderboardData', r.rows);
+    } catch (e) {
+      console.error('Admin reset-user error:', e);
+      socket.emit('adminError', 'User reset failed');
+    }
+  });
+
+  socket.on('adminResetAllUsers', async ({ adminUsername }) => {
+    if (adminUsername !== 'Bingle Berry' || socket.data.username !== 'Bingle Berry') {
+      socket.emit('adminError', 'Unauthorized');
+      return;
+    }
+
+    try {
+      const result = await pool.query(`
+        UPDATE users
+        SET money = 0,
+            mmr = 0,
+            wins = 0,
+            losses = 0,
+            inventory = '[]'::jsonb,
+            equipped_charm = NULL,
+            updated_at = NOW()
+      `);
+
+      console.log(`🧨 Admin reset all player progress. Accounts reset: ${result.rowCount}`);
+
+      io.emit('profilesReset', {
+        by: adminUsername,
+        all: true
+      });
+
+      io.emit('leaderboardData', []);
+
+      socket.emit('adminResetAllSuccess', {
+        resetCount: result.rowCount
+      });
+    } catch (e) {
+      console.error('Admin reset-all error:', e);
+      socket.emit('adminError', 'Reset failed');
+    }
+  });
+
   socket.on('adminTriggerGodMode', ({ adminUsername, targetUsername }) => {
-    if (adminUsername !== 'Bingle Berry') {
+    if (adminUsername !== 'Bingle Berry') { 
       socket.emit('adminError', 'Unauthorized. Only Bingle Berry has this power.');
       return;
     }
 
     console.log(`⚡ Admin granted God Mode to: ${targetUsername}`);
-
-    io.emit('godModeActivated', { targetUsername });
+    io.emit('godModeActivated', { targetUsername }); 
   });
 
   socket.on('disconnect', () => {
@@ -680,9 +637,8 @@ io.on('connection', (socket) => {
     }
 
     const wasHost = socket.id === room.hostSocketId;
-
     room.players = room.players.filter(p => p.socketId !== socket.id);
-
+    
     if (wasHost) {
       closeRoom(room, 'Host left the lobby');
     } else if (room.players.length === 0) {
@@ -694,20 +650,17 @@ io.on('connection', (socket) => {
   });
 });
 
-/* --- PORT --- */
+/* --- PORT FIX --- */
 const PORT = process.env.PORT || 5000;
 
 http.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-/* --- LEADERBOARD AUTO-REFRESH --- */
+/* --- LEADERBOARD AUTO-REFRESH - every 3 mins --- */
 setInterval(async () => {
   try {
-    const r = await pool.query(
-      'SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10'
-    );
-
+    const r = await pool.query('SELECT username, mmr FROM users ORDER BY mmr DESC LIMIT 10');
     io.emit('leaderboardData', r.rows);
   } catch (e) {
     console.error('Auto-leaderboard update error:', e);
