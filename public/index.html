@@ -644,7 +644,6 @@
                         <button class="god-btn" id="god-toggle-btn" onclick="toggleGodModeFromMenu()">God Mode: OFF</button>
                         <button class="god-btn" onclick="godUnlockAllCharms()">Unlock All Charms</button>
                     </div>
-                    <div class="god-stat" id="god-rig-info">Bot-game boost: loading…</div>
                 </div>
                 <div class="god-menu-section">
                     <h3>Money</h3>
@@ -1475,24 +1474,28 @@
             return [...new Set(allCharms)];
         }
 
-        function getRiggedTierNameAndChance(mmr) {
-            // Uses only the base rank tier, so Copper 1-5 all share Copper odds,
-            // Bronze 1-5 all share Bronze odds, etc.
+        function getTierAssist(mmr) {
             const rank = getRank(mmr || 0);
-            const tierNames = ['Copper', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Champion'];
-            const chances = [0.90, 0.70, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00];
-            const tierIndex = Math.max(0, Math.min(rank.index || 0, chances.length - 1));
-            return { tierName: tierNames[tierIndex], chance: chances[tierIndex] ?? 0, rank };
+            const values = [0.90, 0.70, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00];
+            const tierIndex = Math.max(0, Math.min(rank.index || 0, values.length - 1));
+            return { value: values[tierIndex] ?? 0, rank };
         }
 
-        function getRiggedChanceForMmr(mmr) {
-            return getRiggedTierNameAndChance(mmr).chance;
-        }
-
-        function isBotOnlyRigEligible(actingPlayerId) {
+        function isPracticeAssistEligible(actingPlayerId) {
             if (!players || players.length === 0) return false;
             const humanPlayers = players.filter(p => !p.isBot);
             return humanPlayers.length === 1 && players.some(p => p.isBot) && humanPlayers[0].id === actingPlayerId;
+        }
+
+        function getCurrentMatchAssistChance() {
+            if (!players || players.length === 0) return 0;
+            const humanPlayers = players.filter(p => !p.isBot);
+            if (humanPlayers.length !== 1 || !players.some(p => p.isBot)) return 0;
+            const stats = JSON.parse(localStorage.getItem('dumpsterStats')) || {};
+            const humanName = humanPlayers[0].name;
+            const pData = stats[humanName];
+            const mmr = pData ? (pData.mmr || (typeof pData === 'number' ? pData * 35 : 0)) : ((loggedInUser && loggedInUser.username === humanName) ? (loggedInUser.mmr || 0) : 0);
+            return getTierAssist(mmr).value;
         }
 
         function getCurrentUserMmr() {
@@ -1524,11 +1527,6 @@
             const moneyInput = document.getElementById('god-money-input');
             if (moneyInput) moneyInput.value = playerMoney || 0;
 
-            const mmr = getCurrentUserMmr();
-            const rig = getRiggedTierNameAndChance(mmr);
-            const info = document.getElementById('god-rig-info');
-            if (info) info.innerText = `Current rank: ${rig.rank.name} (${rig.tierName} tier) • Bot-only winning-number boost: ${Math.round(rig.chance * 100)}% extra`;
-
             const list = document.getElementById('god-charm-list');
             if (!list) return;
             list.innerHTML = '';
@@ -1547,7 +1545,7 @@
         function toggleGodModeFromMenu() {
             if (!loggedInUser || loggedInUser.username !== 'Bingle Berry') return;
             godMode = !godMode;
-            playerCheatChance = godMode ? 1.0 : playerCheatChance;
+            playerCheatChance = godMode ? 1.0 : getCurrentMatchAssistChance();
             const msg = document.getElementById('admin-msg');
             if (msg) msg.innerText = godMode ? '✨ God Mode enabled.' : 'God Mode disabled.';
             if (typeof toast === 'function') toast(godMode ? '✨ God Mode ON' : 'God Mode OFF', godMode ? 'win' : 'info');
@@ -1981,6 +1979,7 @@
         }
 
         function closeCaseAnimation() { document.getElementById('case-opening-modal').style.display = 'none'; }
+        function closeCaseOpening() { closeCaseAnimation(); }
 
         function equipCharm(charm) {
             if(equippedCharm === charm) equippedCharm = null; 
@@ -2121,11 +2120,11 @@
 
         /* --- TAUNT SYSTEM --- */
         const taunts = [
-            { text: 'Good job… I guess.', vibe: 'plain' },
-            { text: 'Nice roll, trash legend.', vibe: 'plain' },
-            { text: 'You are not losing — you are getting publicly recycled.', vibe: 'toxic' },
-            { text: 'Your strategy has the IQ of wet cardboard.', vibe: 'toxic' },
-            { text: '📢 WOMP WOMP! THE DUMPSTER KINGDOM HAS SPOKEN!', vibe: 'loud' }
+            { text: 'good job', vibe: 'plain' },
+            { text: 'Nice one', vibe: 'plain' },
+            { text: 'your strategy has the IQ of wet cardboard', vibe: 'toxic' },
+            { text: 'maybe you deserve to be in the dumpster', vibe: 'toxic' },
+            { text: 'womp womp the dumpster kingdom has spoken.', vibe: 'loud' }
         ];
 
         function buildTauntMenu() {
@@ -2170,7 +2169,7 @@
             const menu = document.getElementById('taunt-menu');
             if (menu) menu.classList.remove('open');
             const speaker = getTauntSpeaker();
-            const message = `${taunt.vibe === 'loud' ? '📢 ' : '💬 '}${taunt.text}`;
+            const message = taunt.text;
             if (sfxEnabled) sfxTaunt(taunt.vibe === 'loud');
             showTauntBurst(message, taunt.vibe);
             toast(`${speaker.name}: ${taunt.text}`, taunt.vibe === 'toxic' ? 'lose' : 'info');
@@ -2192,6 +2191,17 @@
             const panel = document.getElementById('taunt-panel');
             const menu = document.getElementById('taunt-menu');
             if (panel && menu && !panel.contains(e.target)) menu.classList.remove('open');
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            const tauntMenu = document.getElementById('taunt-menu');
+            if (tauntMenu) tauntMenu.classList.remove('open');
+            const caseModal = document.getElementById('case-opening-modal');
+            const caseClose = document.getElementById('close-case-btn');
+            if (caseModal && caseModal.style.display === 'flex' && caseClose && caseClose.style.display !== 'none') closeCaseAnimation();
+            const godMenu = document.getElementById('god-mode-menu');
+            if (godMenu) godMenu.classList.remove('open');
         });
 
         /* --- MENU LOGIC --- */
@@ -2509,16 +2519,12 @@
 
             const humanPlayers = players.filter(p => !p.isBot);
             const isBotOnlyMatch = humanPlayers.length === 1 && players.some(p => p.isBot);
-            const rigInfo = getRiggedTierNameAndChance(highestHumanMmr);
-            playerCheatChance = isBotOnlyMatch ? rigInfo.chance : 0;
+            const assistInfo = getTierAssist(highestHumanMmr);
+            playerCheatChance = isBotOnlyMatch ? assistInfo.value : 0;
 
             if (godMode) {
                 players.forEach(p => { if (p.isBot) p.dice = 1; else p.dice = 999; });
                 playerCheatChance = 1.0; 
-            }
-
-            if (isBotOnlyMatch && !godMode && playerCheatChance > 0 && typeof toast === 'function') {
-                toast(`🎯 ${rigInfo.tierName} tier boost active: ${Math.round(playerCheatChance * 100)}% extra winning-number chance`, 'info');
             }
 
             document.getElementById('main-menu').style.display = 'none';
@@ -2762,13 +2768,8 @@
             let roll; let emptySlots = [];
             for(let i=0; i<6; i++) { if (sharedBoard[i] === null) emptySlots.push(i+1); }
 
-            // Bot-only rank boost: if the player is in a human-vs-bots match and there is
-            // exactly one winning number left on the shared track, they get an extra chance
-            // to roll that number. This overrides even pre-rolled Socket.IO rolls so it works
-            // in local games and online-hosted games.
-            if (!p.isBot && emptySlots.length === 1 && isBotOnlyRigEligible(actingPlayerId) && Math.random() < playerCheatChance) {
+            if (!p.isBot && emptySlots.length === 1 && isPracticeAssistEligible(actingPlayerId) && Math.random() < playerCheatChance) {
                 roll = emptySlots[0];
-                if (typeof toast === 'function') toast(`🎯 Rank boost hit! Rolled the winning number ${roll}.`, 'success');
             } else if (preRoll !== null) roll = preRoll;
             else roll = Math.floor(Math.random() * 6) + 1;
 
